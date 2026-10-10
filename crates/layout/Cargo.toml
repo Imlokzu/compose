@@ -1,0 +1,7 @@
+[package]
+name = "layout"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+document.workspace = true

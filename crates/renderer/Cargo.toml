@@ -1,0 +1,12 @@
+[package]
+name = "renderer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+text.workspace = true
+document.workspace = true
+gpui.workspace = true
+parley.workspace = true
+anyhow.workspace = true
+skrifa = "0.44"

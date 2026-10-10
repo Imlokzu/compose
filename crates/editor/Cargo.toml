@@ -1,0 +1,13 @@
+[package]
+name = "editor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+document.workspace = true
+text.workspace = true
+
+[dev-dependencies]
+file_format.workspace = true
+tempfile.workspace = true
+serde_json.workspace = true

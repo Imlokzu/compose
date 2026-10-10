@@ -1,0 +1,15 @@
+[package]
+name = "file_format"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+document.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+zip.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+text.workspace = true

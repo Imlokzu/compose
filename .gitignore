@@ -1,0 +1,18 @@
+/target
+.DS_Store
+*.compose.tmp
+/dist
+/.omx
+/cores
+
+# Generated QA output and local orchestration notes.
+/artifacts
+/docs/goal
+/docs/IMPLEMENTATION.md
+
+# Local credentials/configuration.
+.env
+.env.*
+!.env.example
+*.pem
+*.key

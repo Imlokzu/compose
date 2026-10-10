@@ -1,0 +1,11 @@
+[package]
+name = "image_search"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest = { version = "=0.12.28", default-features = false, features = ["blocking", "rustls-tls"] }
+scraper = { version = "=0.27.0", default-features = false }

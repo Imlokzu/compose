@@ -1,0 +1,17 @@
+[package]
+name = "export"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+document.workspace = true
+layout.workspace = true
+renderer.workspace = true
+parley.workspace = true
+text.workspace = true
+image.workspace = true
+anyhow.workspace = true
+tempfile.workspace = true
+tiny-skia = "=0.11.4"
+swash = "=0.2.10"
+png = "=0.17.16"
