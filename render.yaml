@@ -10,7 +10,6 @@ services:
     dockerContext: .
     healthCheckPath: /health
     autoDeployTrigger: "off"
-    maxShutdownDelaySeconds: 70
     envVars:
       - key: COMPOSE_BGCLEAR_API_KEY
         sync: false
