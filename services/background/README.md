@@ -13,6 +13,13 @@ Keep one service instance initially. Operator limits and provider limits both ap
 
 ## Render Free deployment
 
+Compose's shared deployment is live at
+`https://compose-background.onrender.com`. Health/readiness and the packaged native
+Remove background flow were verified on 2026-10-11 using the bundled fictional
+portrait: an 800 × 800 transparent PNG, unchanged bounds/style, Undo/Redo and
+editable save/reopen. This validates that sample; it is not a broad quality
+benchmark for every subject or an uptime guarantee.
+
 The root `render.yaml` explicitly selects the free compute plan, Frankfurt,
 Docker, `/health`, port 10000 and manual deploys. It creates no paid databases,
 disks or workers. The provider key uses `sync: false`: enter it in Render's secret
@@ -93,7 +100,9 @@ $env:COMPOSE_BACKGROUND_SERVICE_URL = 'https://your-service.example/v1/backgroun
 ./scripts/package-windows.ps1
 ```
 
-The public URL is compiled into the image client. Normal users just click
+The packaging scripts default to the live Compose URL above; an explicit
+`COMPOSE_BACKGROUND_SERVICE_URL` selects another deployment. The public URL is
+compiled into the image client. Normal users just click
 **Remove background** or **Without background** in search. A runtime
 `COMPOSE_BACKGROUND_SERVICE_URL` override is available for local development;
 HTTP is accepted only for loopback. A build with no endpoint explains that the
@@ -129,3 +138,14 @@ desktop client, PNG/alpha validation, health, invalid uploads, blocked origins,
 spoofed forwarding headers, quotas, concurrency and sanitized provider failures.
 They do not claim actual provider mask quality. An authenticated live cutout
 requires the operator's real bgclear key and a reachable deployment.
+
+The opt-in packaged native check sends the bundled sample portrait to the configured
+HTTPS service. It uses the compiled public URL when no runtime override is set:
+
+```sh
+dist/Compose.app/Contents/MacOS/compose --ui-smoke --shared-service-live --compact
+```
+
+It verifies the actual button, transparent image, original geometry, Undo/Redo and
+native save/reopen. Its files are written under `artifacts/shared-service/live/`.
+The ordinary `--shared-service` check remains restricted to a loopback fixture.

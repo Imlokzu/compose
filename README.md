@@ -398,19 +398,24 @@ Deployment files and operator instructions are in
 separate Rust executable with bounded requests, concurrency and shared limits;
 it stores no images and has no user accounts/database.
 
-Release builders set the **public** `COMPOSE_BACKGROUND_SERVICE_URL` before
+The macOS and Windows packaging scripts include the live shared service at
+`https://compose-background.onrender.com/v1/background/remove` by default.
+Builders can override the **public** `COMPOSE_BACKGROUND_SERVICE_URL` before
 packaging. Normal users do not configure anything. A local runtime override can
 point to `http://127.0.0.1:8787/v1/background/remove` during development. Builds
 without an endpoint explain that the service is not connected yet. The local
-pipeline is tested with a real relay and controlled provider responses; going
-live still requires a provider key in the server's secret settings.
+pipeline is tested with a real relay and controlled provider responses.
+The Render deployment and packaged native Remove background button were also
+verified against the live provider on 2026-10-11, including transparent PNG output,
+unchanged geometry, Undo/Redo and editable save/reopen. The provider key stays
+in the server's secret settings.
 The root `render.yaml` creates a Render Free Docker service in Frankfurt.
 Render Free can sleep after 15 idle minutes; Compose checks health before
 uploading and allows up to two minutes for the service to wake.
 
 Windows development needs Rust's MSVC toolchain and Visual Studio C++ Build Tools
 with the Windows SDK (GPUI compiles its DirectX shaders using `fxc.exe`). Run
-`./scripts/package-windows.ps1` for an optimized portable Windows ZIP. The
+`./scripts/package-windows.ps1` for an optimized portable Windows ZIP.
 GitHub CI publication and Windows GUI/hardware QA are still pending.
 
 ```sh

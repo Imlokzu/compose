@@ -98,7 +98,7 @@ pub fn native(window: gpui::WindowHandle<crate::workspace::Workspace>, cx: &mut 
                 crate::preset_smoke::run(window,cx).await?;
             }
             if std::env::args().any(|a|a=="--actions"){crate::actions_smoke::run(window,cx).await?;}
-            if std::env::args().any(|a|a=="--shared-service"){crate::shared_service_smoke::run(window,cx).await?;}
+            if std::env::args().any(|a|a=="--shared-service"||a=="--shared-service-live"){crate::shared_service_smoke::run(window,cx).await?;}
             Ok::<_, anyhow::Error>(())
         }.await;
         match result {

@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
+: "${COMPOSE_BACKGROUND_SERVICE_URL:=https://compose-background.onrender.com/v1/background/remove}"
+export COMPOSE_BACKGROUND_SERVICE_URL
 cargo build -p compose --locked
 compose_bundle="$PWD/dist/Compose.app"
 mkdir -p "$compose_bundle/Contents/MacOS" "$compose_bundle/Contents/Resources"
