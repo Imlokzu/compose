@@ -20,6 +20,7 @@ pub struct ImageResult {
     pub thumbnail_failed: bool,
 }
 pub struct ImagePicker {
+    pub insert_point: Option<document::Point>,
     pub provider: Provider,
     pub replace_target: Option<document::NodeId>,
     pub tab: ImageTab,
@@ -37,6 +38,7 @@ pub struct ImagePicker {
 impl Default for ImagePicker {
     fn default() -> Self {
         Self {
+            insert_point: None,
             provider: Provider::Web,
             replace_target: None,
             tab: ImageTab::Computer,
@@ -72,6 +74,7 @@ impl ImagePicker {
 }
 impl Workspace {
     pub fn open_image_picker(&mut self, cx: &mut Context<Self>) {
+        self.image_picker.insert_point = None;
         self.close_popup();
         self.image_picker.invalidate();
         self.image_picker.replace_target = None;
@@ -268,6 +271,15 @@ impl Workspace {
         .detach();
     }
     pub fn insert_search_image(&mut self, cx: &mut Context<Self>) {
+        self.insert_search_image_with_cutout(false, cx);
+    }
+    pub fn insert_search_image_with_cutout(&mut self, cutout: bool, cx: &mut Context<Self>) {
+        if cutout && self.background_service.is_none() {
+            self.open_background_settings();
+            cx.notify();
+            return;
+        }
+        let endpoint = self.background_service.clone();
         if self.image_picker.inserting || self.popup != Some(Popup::Images) {
             return;
         }
@@ -285,8 +297,12 @@ impl Workspace {
         let task = cx.background_executor().spawn(async move {
             let result = (|| -> anyhow::Result<_> {
                 anyhow::ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
-                let bytes = SearchClient::new()?.original(&item)?;
+                let mut bytes = SearchClient::new()?.original(&item)?;
                 anyhow::ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
+                if cutout {
+                    bytes = image_tools::remove_shared(&bytes, endpoint.as_deref().unwrap())?;
+                    anyhow::ensure!(!cancel.load(Ordering::Relaxed), "Cancelled");
+                }
                 let (image, w, h) = Self::decode_image(&bytes)?;
                 Ok((bytes, image, w, h))
             })();
@@ -314,7 +330,15 @@ impl Workspace {
                             credit: item.credit,
                         };
                         match s.apply_picker_image(bytes, image, w, h, item.title, Some(source)) {
-                            Ok(()) => s.close_popup(),
+                            Ok(()) => {
+                                s.close_popup();
+                                if cutout {
+                                    s.set_status(
+                                        "Image inserted without background · free preview resolution",
+                                        false,
+                                    );
+                                }
+                            }
                             Err(e) => {
                                 s.image_picker.error =
                                     Some(format!("Could not use this image: {e:#}"))
@@ -436,14 +460,28 @@ impl Workspace {
         let id = self.editor.document.insert(
             self.editor.page,
             NodeKind::Image { asset: key.clone() },
-            Rect::new(64., 120., width, height),
+            {
+                let p = self
+                    .image_picker
+                    .insert_point
+                    .unwrap_or(document::Point { x: 64., y: 120. });
+                let page = &self.editor.document.pages[self.editor.page];
+                Rect::new(
+                    p.x.clamp(0., (page.width - width).max(0.)),
+                    p.y.clamp(0., (page.height - height).max(0.)),
+                    width,
+                    height,
+                )
+            },
         );
         self.editor.select_only(Some(id));
+        let radius = if self.word_mode() { 0. } else { 12. };
         let node = self.editor.document.node_mut(id).unwrap();
         node.name = name;
-        node.radius = 12.;
+        node.radius = radius;
         node.image_source = source;
         self.images.insert(key, image);
+        self.measure();
     }
     pub fn apply_picker_image(
         &mut self,

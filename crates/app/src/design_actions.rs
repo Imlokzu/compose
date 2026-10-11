@@ -81,6 +81,10 @@ impl Workspace {
         }
     }
     pub fn apply_color(&mut self, c: Color, checkpoint: bool) {
+        if self.word_mode() && c.a != 255 {
+            self.set_status("Word mode uses opaque text colors", true);
+            return;
+        }
         if self.selection_locked() {
             return;
         }
@@ -184,6 +188,10 @@ impl Workspace {
         }
     }
     pub fn insert_block(&mut self, component: editor::Component) {
+        if self.word_mode() {
+            self.set_status("Canvas components are available in Compose mode", true);
+            return;
+        }
         self.close_popup();
         self.end_edit();
         let page = &self.editor.document.pages[self.editor.page];
@@ -199,6 +207,10 @@ impl Workspace {
         );
     }
     pub fn toggle_shadow(&mut self) {
+        if self.word_mode() {
+            self.set_status("Shadows are available in Compose mode", true);
+            return;
+        }
         self.commit_field();
         if self.selection_locked() {
             return;
@@ -209,6 +221,10 @@ impl Workspace {
         }
     }
     pub fn toggle_stroke(&mut self) {
+        if self.word_mode() {
+            self.set_status("Object strokes are available in Compose mode", true);
+            return;
+        }
         self.commit_field();
         if self.selection_locked() {
             return;
@@ -223,6 +239,15 @@ impl Workspace {
         }
     }
     pub fn set_page_size(&mut self, width: f32, height: f32) {
+        if self.word_mode()
+            && (width <= 2. * document::WORD_MARGIN + 40.
+                || height <= 2. * document::WORD_MARGIN + 40.
+                || width > 1584.
+                || height > 1584.)
+        {
+            self.set_status("Choose a Word page size that fits 1-inch margins", true);
+            return;
+        }
         self.commit_field();
         self.end_edit();
         self.editor.checkpoint();
@@ -248,6 +273,10 @@ impl Workspace {
     }
     pub fn commit_special_field(&mut self, edit: &FieldEdit) -> bool {
         match edit.field {
+            Field::LinkUrl => {
+                self.link_url = edit.value.clone();
+                true
+            }
             Field::DocumentName => {
                 if !edit.value.trim().is_empty() {
                     self.editor.checkpoint();
@@ -287,6 +316,10 @@ impl Workspace {
                 true
             }
             Field::StrokeWidth | Field::ShadowBlur | Field::ShadowY => {
+                if self.word_mode() {
+                    self.set_status("Canvas effects are available in Compose mode", true);
+                    return true;
+                }
                 if self.selection_locked() {
                     return true;
                 }

@@ -284,3 +284,128 @@ platform conversion and dispatch without desktop input injection. It covers
 two-finger pan, modifier scroll, phase/limit handling, popover/sidebar isolation
 and unchanged document/selection/save state. Physical hardware gestures and
 Windows/Linux pinch backends require separate platform validation.
+
+## Document modes and editable Word output (0.9)
+
+`Document::mode` is persisted with a Compose default for old files. Word mode is
+a compatibility profile: top-level rich text and images, opaque content, source
+proportions and no canvas effects. `word_issues` reports incompatible nodes and
+page sizes; `validate_word` rejects exports outside Word mode. General document
+validation also rejects unsupported content when the document is marked Word.
+Grouping and reparenting are disabled in that profile; candidate clipboard pastes
+validate before committing, preventing unsupported subtrees crossing modes.
+
+`app::document_mode` owns the chooser, explicit new-document actions and flow
+properties. Compatible mode changes sort blocks into reading order and reflow
+through the existing Parley engine with 72-point margins and a 12-point block gap.
+Word images fit the text column and retain decoded proportions. The gesture,
+inspector and keyboard boundaries prevent free placement and canvas effects.
+Mode changes are undoable and new-document actions use existing unsaved prompts.
+
+`export::word` uses pinned docx-rs 0.4.22 without its image feature; the existing
+bounded image decoder converts embedded raster files to PNG for inline pictures.
+Rich text UTF-8 spans become genuine Word runs/paragraphs, including whitespace,
+Unicode, tabs, font names, size, weight/style, color and paragraph settings.
+Pages become sections with their individual sizes. Exports atomically replace
+their destination only after validation and complete packaging.
+
+DOCX is output only. Word may substitute fonts/reflow; no exact Word pagination
+or DOCX import is claimed. The Compose editor currently uses explicit pages and
+unlinked text blocks. Raster/print output rejects overflowing Word blocks instead
+of silently discarding text; DOCX retains the complete text for Word pagination.
+
+## Creation and direct manipulation (0.10)
+
+`document::presets` builds local editable Blank, Report, Letter and Poster models.
+The GPUI creation screen keeps a separate mode/preset/name draft; selecting or
+cancelling never mutates the open document. A `Pending::Create` snapshot reuses
+Save / Discard / Cancel. Successful creation enters the real editor. Preview
+images come from `export::PageRenderer` in a background task, so no parallel
+template representation or web UI is required.
+
+Canvas creation uses a transient `Gesture::Create` rectangle. Mouse release
+commits one object/history transaction; Escape discards the preview. Bounds are
+clamped to the page, reverse drags normalize, and typing keeps the user-sized
+height. Selected text borders start ordinary movement after ending text editing.
+Word insertion still flows through the restricted layout profile.
+
+`app::context_menu` reuses clipboard and editor actions. `hit_test_context` includes
+visible locked objects for inspection/unlocking, while ordinary hits and mutation
+guards keep those objects protected. Context menus preserve text ranges, work in
+Layers, and snap within the native window. Word Layers show reading order;
+Compose Layers retain their back-to-front canvas representation.
+
+## Résumé and photo presets (0.11)
+
+`document::presets::designed` constructs the résumé, portrait résumé, photo cover
+and portfolio from regular rich-text, shape and image nodes. The single-column
+résumé supports Word flow; the designed photo layouts retain Compose-only
+geometry and effects. Two bundled original sample PNGs are embedded as normal
+document assets, without a runtime download or additional rendering backend.
+The existing image picker replaces them with its standard bounds/style/history
+semantics. `Preset::document_name` supplies draft names without constructing or
+copying an entire photo document merely to change a creation-screen label.
+
+The eight-preset gallery is a native wrapping grid inside a bounded scroll area.
+Its scroll handle resets on New; mode, name and preview stay visible while the
+gallery scrolls. Previews still use the shared document exporter in the background.
+Verification checks actual Parley text heights, page bounds, original image
+proportions, Word résumé export, native creation and image replacement, and exact
+photo/document save/reopen. Generated asset provenance is in assets/presets.
+
+## Portable interactions and cloud cutouts (0.12)
+
+`editor::drop_layer` performs arbitrary relative ordering and reparenting in one
+snapshot, keeping world coordinates and rejecting locks/cycles. GPUI typed drag
+payloads carry page/epoch identity; `app::drag_drop` maps visual row order to model
+order and rejects stale drops. Insert/Assets drops create real nodes. OS file drops
+use the same path payload on Windows/macOS; bounded background decoding precedes
+a coalesced editor batch, so multiple files have one undo step.
+
+`TextStyle::link` is optional/default-none for legacy files. Existing attributed
+text edits, slices and styled clipboard operations preserve its ranges. The URL
+layer allows http/https/mailto and rejects active/local schemes. `app::links` keeps
+the target passage while a native popover edits its address; glyph selection
+geometry gates pointer activation. DOCX writes OOXML hyperlinks with relationships.
+
+`image_tools` is platform-independent Rust/reqwest. It uploads one bounded image
+to bgclear using explicit free-preview parameters, blocks redirects, bounds reads
+and dimensions, checks PNG/alpha/proportions, and gives actionable error states.
+No inference runtime/model or GPU processing is introduced. App tasks run off the
+UI thread and recheck epoch, asset identity and locks before normal replacement.
+Original pixels remain shared by undo. Search cutouts reuse the same processor.
+
+The initial 0.12 setup used GPUI's credential API for Windows Credential Manager /
+macOS Keychain. That per-user setup is removed in 0.13 in favor of the shared service
+below; provider credentials now live exclusively on the server.
+The service's live missing-key endpoint was probed; an authenticated result needs
+a user key. Local HTTP tests exercise the exact multipart contract and failure
+states without uploading user images. Windows packaging/CI is included; actual
+Windows GUI and older-PC performance remain separate validation requirements.
+
+## Shared service (0.13)
+
+`compose-background-service` is a separate Rust/Axum executable, not a desktop
+dependency. It owns the provider key, bounded image endpoint, concurrency limits,
+per-IP minute/day limits, global daily allowance, typed errors, request IDs and
+graceful shutdown. It binds loopback by default; HTTPS is supplied by a controlled
+reverse proxy/tunnel. Forwarded IP headers are ignored unless the immediate peer
+is explicitly trusted. There is no image persistence or user account/database.
+
+The native app now owns only an optional public service URL. It is injected at
+build time with `COMPOSE_BACKGROUND_SERVICE_URL`, with a runtime development
+override. HTTPS is required except on loopback; URLs with credentials/query/fragment
+are rejected. `image_tools::remove_shared` posts the selected image without an auth
+header, validates the returned PNG and maps typed shared-limit/service failures.
+Provider-key fields and platform credential loading are removed from the client.
+
+The service reuses the existing strict provider client with explicit free-preview
+parameters. Operator secrets come from environment or a mounted secret file;
+they never go through the desktop build or service responses/logs. Docker packaging
+uses a non-root, read-only runtime and excludes secret files from its build context.
+Limits are process-local: initial deployment should remain a single instance.
+
+Tests run an actual local HTTP relay with an injected provider and exercise the
+native Remove button, transparent asset, geometry/style, undo/redo and reopening.
+This proves transport and integration, not remote-provider mask quality. Public
+deployment and authenticated provider validation require the owner's host/key.

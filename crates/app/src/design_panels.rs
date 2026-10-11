@@ -226,6 +226,9 @@ impl Workspace {
                 .child("A few good starting points. Every layer is editable."),
         );
         for (i, component) in editor::Component::ALL.into_iter().enumerate() {
+            let entity = cx.entity();
+            let drag_entity = entity.clone();
+            let epoch = self.drag_epoch;
             let preview = match component {
                 editor::Component::Title => div()
                     .child(
@@ -295,6 +298,23 @@ impl Workspace {
             };
             list = list.child(
                 div()
+                    .on_children_prepainted(move |bounds, _, cx| {
+                        if let Some(b) = bounds.first() {
+                            entity.update(cx, |s, _| {
+                                s.selection_control_bounds.insert(
+                                    [
+                                        "asset-title",
+                                        "asset-callout",
+                                        "asset-quote",
+                                        "asset-stat",
+                                        "asset-card",
+                                        "asset-divider",
+                                    ][i],
+                                    *b,
+                                );
+                            });
+                        }
+                    })
                     .id(("component", i))
                     .p(px(10.))
                     .rounded(px(7.))
@@ -328,7 +348,23 @@ impl Workspace {
                     .on_click(cx.listener(move |s, _, _, cx| {
                         s.insert_block(component);
                         cx.notify();
-                    })),
+                    }))
+                    .on_drag(
+                        crate::drag_drop::InsertDrag {
+                            kind: crate::drag_drop::InsertKind::Component(component),
+                            epoch,
+                        },
+                        move |_, position, _, cx| {
+                            drag_entity.update(cx, |s, _| {
+                                s.end_edit();
+                                s.gesture = crate::workspace::Gesture::None;
+                            });
+                            cx.new(|_| crate::drag_drop::DragLabel {
+                                name: component.name().into(),
+                                position,
+                            })
+                        },
+                    ),
             );
         }
         list
@@ -367,6 +403,22 @@ impl Workspace {
             .border_color(rgb(LINE))
             .shadow_lg();
         match popup {
+            Popup::Link => {
+                body = body
+                    .child(self.popup_header("Text link", cx))
+                    .child(self.link_popup_view(cx));
+            }
+            Popup::Background => {
+                body = body
+                    .child(self.popup_header("Background removal", cx))
+                    .child(self.background_settings_view(cx));
+            }
+            Popup::Context => return self.context_menu_view(cx),
+            Popup::Modes => {
+                body = body
+                    .child(self.popup_header("Document mode", cx))
+                    .child(self.mode_menu(cx));
+            }
             Popup::Export => {
                 body = body
                     .child(self.popup_header("Export & print", cx))

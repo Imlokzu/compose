@@ -5,7 +5,7 @@ use crate::{
 use gpui::{prelude::*, *};
 use text::TextStyle;
 
-pub const TEXT_TOOLBAR_WIDTH: f32 = 384.;
+pub const TEXT_TOOLBAR_WIDTH: f32 = 420.;
 pub const TEXT_TOOLBAR_HEIGHT: f32 = 84.;
 
 pub struct TextPreset {
@@ -266,6 +266,22 @@ impl Workspace {
                         )
                         .child(div().w(px(1.)).h(px(18.)).bg(rgb(LINE)))
                         .child(self.text_controls(true, cx))
+                        .child(
+                            self.capture_control(
+                                "float-link",
+                                self.button(
+                                    "float-link",
+                                    "",
+                                    Some("link"),
+                                    self.format_values().iter().any(|s| s.link.is_some()),
+                                    false,
+                                    cx,
+                                    |s, _, _| s.open_link_editor(),
+                                )
+                                .w(px(30.)),
+                                cx,
+                            ),
+                        )
                         .child(
                             self.button(
                                 "float-color",

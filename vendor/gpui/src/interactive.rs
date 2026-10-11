@@ -515,6 +515,8 @@ impl Deref for MouseExitEvent {
 pub struct ExternalPaths(pub(crate) SmallVec<[PathBuf; 2]>);
 
 impl ExternalPaths {
+    /// Construct the same path payload used by platform file-drop dispatch.
+    pub fn new(paths: impl IntoIterator<Item=PathBuf>)->Self {Self(paths.into_iter().collect())}
     /// Convert this collection of paths into a slice.
     pub fn paths(&self) -> &[PathBuf] {
         &self.0

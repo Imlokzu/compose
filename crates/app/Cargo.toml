@@ -19,6 +19,7 @@ sha2.workspace = true
 tempfile.workspace = true
 serde_json.workspace = true
 image_search = { path = "../image_search" }
+image_tools = { path = "../image_tools" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "=0.2.7"

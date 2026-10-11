@@ -55,6 +55,9 @@ impl Workspace {
         }
     }
     pub fn align_selection(&mut self, align: Align) {
+        if self.word_mode() {
+            return;
+        }
         if !self.prepare_selection_action() {
             return;
         }
@@ -93,6 +96,9 @@ impl Workspace {
         self.set_status("Alignment applied", false);
     }
     pub fn distribute_selection(&mut self, direction: Distribute) {
+        if self.word_mode() {
+            return;
+        }
         if !self.prepare_selection_action() {
             return;
         }

@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: compose-background
+    runtime: docker
+    plan: free
+    region: frankfurt
+    repo: https://github.com/Imlokzu/compose
+    branch: main
+    dockerfilePath: ./services/background/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    maxShutdownDelaySeconds: 70
+    envVars:
+      - key: COMPOSE_BGCLEAR_API_KEY
+        sync: false
+      - key: COMPOSE_SERVICE_BIND
+        value: 0.0.0.0:10000
+      - key: PORT
+        value: "10000"
+      - key: COMPOSE_PLATFORM_PROXY
+        value: render
+      - key: COMPOSE_MAX_CONCURRENT
+        value: "2"
+      - key: COMPOSE_PER_IP_MINUTE
+        value: "3"
+      - key: COMPOSE_PER_IP_DAY
+        value: "30"
+      - key: COMPOSE_GLOBAL_DAY
+        value: "500"

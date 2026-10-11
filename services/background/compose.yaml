@@ -1,0 +1,14 @@
+services:
+  background:
+    build:
+      context: ../..
+      dockerfile: services/background/Dockerfile
+    ports:
+      - "127.0.0.1:8787:8787"
+    env_file: .env
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1.0

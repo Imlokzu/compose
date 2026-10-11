@@ -1,3 +1,4 @@
+pub mod links;
 pub mod palette;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -30,6 +31,8 @@ pub struct TextStyle {
     pub color: Color,
     pub line_height: f32,
     pub letter_spacing: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
 }
 impl Default for TextStyle {
     fn default() -> Self {
@@ -42,12 +45,14 @@ impl Default for TextStyle {
             color: Color::rgb(35, 38, 36),
             line_height: 1.4,
             letter_spacing: 0.,
+            link: None,
         }
     }
 }
 impl TextStyle {
     pub fn valid(&self) -> bool {
         !self.family.is_empty()
+            && self.link.as_ref().is_none_or(|url| links::valid(url))
             && self.family.len() < 256
             && self.size.is_finite()
             && (1.0..=1000.).contains(&self.size)

@@ -403,7 +403,8 @@ impl Editor {
         }
     }
     pub fn can_group(&self) -> bool {
-        self.selection.len() > 1
+        self.document.mode == document::DocumentMode::Compose
+            && self.selection.len() > 1
             && !self.selection_locked()
             && self
                 .selection

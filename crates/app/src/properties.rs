@@ -28,6 +28,10 @@ impl Workspace {
         })
     }
     pub fn set_image_sizing(&mut self, mode: ImageSizing) {
+        if self.word_mode() && mode == ImageSizing::Stretch {
+            self.set_status("Image stretching is available in Compose mode", true);
+            return;
+        }
         self.commit_field();
         let Some(ratio) = self.image_ratio() else {
             return;
@@ -83,6 +87,10 @@ impl Workspace {
         self.set_status("Image scaled", false);
     }
     pub fn set_radius(&mut self, radius: f32) {
+        if self.word_mode() {
+            self.set_status("Image corners are available in Compose mode", true);
+            return;
+        }
         self.commit_field();
         let Some(n) = self.editor.selected_node() else {
             return;

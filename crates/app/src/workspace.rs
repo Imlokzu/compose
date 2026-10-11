@@ -39,6 +39,8 @@ pub enum Field {
     ColorAlpha,
     FontSearch,
     ImageSearch,
+    NewDocumentName,
+    LinkUrl,
 }
 #[derive(Clone)]
 pub struct FieldEdit {
@@ -52,11 +54,18 @@ pub struct FieldEdit {
 #[derive(Clone)]
 pub enum Pending {
     New,
+    NewWord,
+    Create(Box<Document>),
     Open(PathBuf),
     Close,
 }
 pub enum Gesture {
     None,
+    Create {
+        start: DocPoint,
+        current: DocPoint,
+        tool: Tool,
+    },
     Move {
         start: DocPoint,
         frame: Rect,
@@ -88,6 +97,10 @@ pub enum Gesture {
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Popup {
+    Link,
+    Background,
+    Context,
+    Modes,
     Export,
     Images,
     Fonts,
@@ -114,6 +127,16 @@ pub struct ColorPicker {
     pub changed: bool,
 }
 pub struct Workspace {
+    pub link_edit: Option<crate::links::LinkEdit>,
+    pub link_url: String,
+    pub drag_epoch: u64,
+    pub background_service: Option<String>,
+    pub cutout_target: Option<NodeId>,
+    pub cutout_generation: u64,
+    pub creation: Option<crate::creation::Creation>,
+    pub preset_previews: HashMap<document::presets::Preset, Arc<RenderImage>>,
+    pub preset_scroll: ScrollHandle,
+    pub context_position: gpui::Point<Pixels>,
     pub object_clipboard: Option<crate::clipboard::LocalClipboard>,
     pub image_picker: crate::image_picker::ImagePicker,
     pub popup: Option<Popup>,
@@ -210,7 +233,20 @@ impl Workspace {
             }
         })
         .detach();
-        Self {
+        let show_creation = path.is_none()
+            && !std::env::args()
+                .any(|a| a.starts_with("--ui-smoke") || a.starts_with("--image-picker"));
+        let mut workspace = Self {
+            link_edit: None,
+            link_url: String::new(),
+            drag_epoch: 0,
+            background_service: None,
+            cutout_target: None,
+            cutout_generation: 0,
+            creation: show_creation.then(crate::creation::Creation::default),
+            preset_previews: HashMap::new(),
+            preset_scroll: ScrollHandle::new(),
+            context_position: point(px(0.), px(0.)),
             object_clipboard: None,
             image_picker: Default::default(),
             popup: None,
@@ -261,7 +297,10 @@ impl Workspace {
             collapsed: false,
             collapsed_nodes: Default::default(),
             caret_visible: true,
-        }
+        };
+        workspace.load_preset_previews(cx);
+        workspace.load_background_service();
+        workspace
     }
     pub fn dirty(&self) -> bool {
         self.editor.document != self.saved
@@ -297,6 +336,10 @@ impl Workspace {
         self.error = error;
     }
     pub fn measure(&mut self) {
+        if self.word_mode() {
+            self.reflow_word();
+            return;
+        }
         let nodes = self.editor.document.pages[self.editor.page].nodes.clone();
         fn gather(nodes: &[document::Node], out: &mut Vec<(NodeId, RichText, f32)>) {
             for n in nodes {
@@ -348,14 +391,35 @@ impl Workspace {
         self.fitted = true;
     }
     pub fn insert_at(&mut self, tool: Tool, p: DocPoint) {
+        let page = &self.editor.document.pages[self.editor.page];
+        let (w, h): (f32, f32) = match tool {
+            Tool::Text => (300., 28.),
+            Tool::Frame => (280., 180.),
+            _ => (160., 120.),
+        };
+        let x = p.x.clamp(0., (page.width - 16.).max(0.));
+        let y = p.y.clamp(0., (page.height - 16.).max(0.));
+        self.insert_box(
+            tool,
+            Rect::new(x, y, w.min(page.width - x), h.min(page.height - y)),
+        );
+    }
+    pub fn insert_box(&mut self, tool: Tool, rect: Rect) {
+        if self.word_mode() && tool != Tool::Text {
+            self.set_status("Shapes and frames are available in Compose mode", true);
+            return;
+        }
         self.commit_field();
         self.end_edit();
-        let (kind, w, h) = match tool {
-            Tool::Text => (NodeKind::Text(RichText::new("")), 300., 28.),
-            Tool::Frame => (NodeKind::Frame, 280., 180.),
-            _ => (NodeKind::Shape, 160., 120.),
+        let kind = match tool {
+            Tool::Text => NodeKind::Text(RichText::new("")),
+            Tool::Frame => NodeKind::Frame,
+            _ => NodeKind::Shape,
         };
-        self.editor.insert(kind, Rect::new(p.x, p.y, w, h));
+        self.editor.insert(kind, rect);
+        if self.word_mode() {
+            self.measure();
+        }
         self.tool = Tool::Select;
         if tool == Tool::Text {
             self.editing = true;
@@ -372,6 +436,9 @@ impl Workspace {
         );
     }
     pub fn undo(&mut self, redo: bool) {
+        self.drag_epoch = self.drag_epoch.wrapping_add(1);
+        self.cutout_generation = self.cutout_generation.wrapping_add(1);
+        self.cutout_target = None;
         self.image_picker.invalidate();
         if self.preview {
             return;
@@ -490,6 +557,24 @@ impl Workspace {
         if edit.value == edit.original {
             return;
         }
+        if edit.field == Field::NewDocumentName {
+            if let Some(creation) = &mut self.creation {
+                creation.name = edit.value.trim().to_string();
+            }
+            return;
+        }
+        if self.word_mode()
+            && matches!(
+                edit.field,
+                Field::X | Field::Y | Field::H | Field::Opacity | Field::Radius | Field::Color
+            )
+        {
+            self.set_status(
+                "Word mode manages block layout and uses opaque content",
+                true,
+            );
+            return;
+        }
         if self.commit_special_field(&edit) {
             return;
         }
@@ -597,6 +682,15 @@ impl Workspace {
         self.set_status("Updated", false);
     }
     pub fn request(&mut self, p: Pending, cx: &mut Context<Self>) {
+        if matches!(p, Pending::New | Pending::NewWord) {
+            self.open_creation(if matches!(p, Pending::NewWord) {
+                document::DocumentMode::Word
+            } else {
+                document::DocumentMode::Compose
+            });
+            cx.notify();
+            return;
+        }
         if self.popup == Some(Popup::Images) {
             self.close_popup();
         }
@@ -611,7 +705,20 @@ impl Workspace {
     pub fn execute(&mut self, p: Pending, cx: &mut Context<Self>) {
         self.pending = None;
         match p {
-            Pending::New => self.replace_document(Document::default(), None),
+            Pending::New => self.open_creation(document::DocumentMode::Compose),
+            Pending::NewWord => self.open_creation(document::DocumentMode::Word),
+            Pending::Create(doc) => {
+                self.replace_document(*doc, None);
+                self.measure();
+                self.set_status(
+                    if self.word_mode() {
+                        "Word-compatible · editable .docx export · text flows in reading order"
+                    } else {
+                        "Compose · drag to draw a text box · double-click text to edit"
+                    },
+                    false,
+                );
+            }
             Pending::Open(p) => match file_format::load(&p) {
                 Ok(d) => {
                     if let Err(e) = self.validate_images(&d) {
@@ -627,6 +734,13 @@ impl Workspace {
         cx.notify();
     }
     pub fn replace_document(&mut self, doc: Document, path: Option<PathBuf>) {
+        self.link_edit = None;
+        self.link_url.clear();
+        self.drag_epoch = self.drag_epoch.wrapping_add(1);
+        self.cutout_generation = self.cutout_generation.wrapping_add(1);
+        self.cutout_target = None;
+        self.creation = None;
+        self.gesture = Gesture::None;
         self.image_picker.invalidate();
         self.popup = None;
         self.text_popup_anchor = None;
@@ -642,6 +756,7 @@ impl Workspace {
         self.selection_control_bounds.clear();
         self.collapsed_nodes.clear();
         self.collapsed = false;
+        self.assets_tab = false;
         self.path = path;
         self.pan = DocPoint::default();
         self.fitted = false;
@@ -824,6 +939,9 @@ impl Workspace {
 
 impl Workspace {
     pub fn align_object(&mut self, align: u8) {
+        if self.word_mode() {
+            return;
+        }
         self.commit_field();
         self.end_edit();
         let Some(id) = self.editor.selected() else {

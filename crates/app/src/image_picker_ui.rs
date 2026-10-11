@@ -511,6 +511,18 @@ impl Workspace {
             }
             body = body.child(
                 footer
+                    .child(
+                        self.button(
+                            "insert-cutout",
+                            "Without background",
+                            Some("clear-style"),
+                            false,
+                            selected.is_none() || picker.inserting || picker.loading,
+                            cx,
+                            |s, _, cx| s.insert_search_image_with_cutout(true, cx),
+                        )
+                        .h(px(35.)),
+                    )
                     .when(
                         picker.error.as_ref().is_some_and(|e| {
                             e.starts_with("Could not insert") || e.starts_with("Could not use")

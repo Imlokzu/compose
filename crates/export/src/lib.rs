@@ -12,6 +12,7 @@ use swash::{
 use tiny_skia::{FillRule, Mask, Paint, PathBuilder, Pixmap, PixmapPaint, Transform};
 
 pub const PAGE_BACKGROUND: Color = Color::rgb(255, 254, 251);
+pub mod word;
 const MAX_PIXELS: u64 = 32_000_000;
 
 pub fn dimensions(width: f32, height: f32, dpi: u32) -> Result<(u32, u32)> {
@@ -50,6 +51,10 @@ impl Default for PageRenderer {
 impl PageRenderer {
     pub fn render(&mut self, doc: &Document, page: usize, dpi: u32) -> Result<Pixmap> {
         doc.validate().map_err(anyhow::Error::msg)?;
+        ensure!(
+            !doc.word_overflows(page),
+            "A Word block extends past this page. Split it onto another page or export DOCX, where Word paginates its text"
+        );
         let page = doc.pages.get(page).context("Page no longer exists")?;
         let (w, h) = dimensions(page.width, page.height, dpi)?;
         let mut canvas = Pixmap::new(w, h).context("Could not allocate the exported page")?;

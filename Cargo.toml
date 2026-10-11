@@ -4,7 +4,7 @@ members = ["crates/*"]
 exclude = ["vendor/gpui"]
 
 [workspace.package]
-version = "0.8.1"
+version = "0.13.1"
 edition = "2024"
 license = "MIT"
 

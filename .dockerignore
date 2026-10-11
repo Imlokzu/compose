@@ -1,0 +1,10 @@
+.git
+target
+dist
+artifacts
+.omx
+.DS_Store
+**/.env
+**/.env.*
+**/*.key
+**/*.pem

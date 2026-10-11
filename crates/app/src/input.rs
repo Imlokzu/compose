@@ -32,6 +32,17 @@ impl Workspace {
         byte_to_utf16(s, r.start)..byte_to_utf16(s, r.end)
     }
     pub fn replace_input(&mut self, range: Range<usize>, s: &str) {
+        if self.creation.is_some() && self.field.is_none() {
+            return;
+        }
+        if self.word_mode()
+            && self.field.is_none()
+            && s.chars()
+                .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+        {
+            self.set_status("Word mode cannot store these control characters", true);
+            return;
+        }
         if let Some(f) = &mut self.field {
             let start = text::floor_boundary(&f.value, range.start);
             let end = text::floor_boundary(&f.value, range.end).max(start);
@@ -75,7 +86,8 @@ impl Workspace {
         self.measure();
         if let Some(l) = self.layout() {
             let h = l.height.max(24.);
-            self.editor.selected_node_mut().unwrap().frame.height = h;
+            let node = self.editor.selected_node_mut().unwrap();
+            node.frame.height = node.frame.height.max(h);
         }
     }
     fn move_caret(&mut self, index: usize, extend: bool) {
@@ -107,11 +119,47 @@ impl Workspace {
             cx.stop_propagation();
             return;
         }
+        if self.creation.is_some() && self.creation_key(key, command, m.shift, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
+        if command && key == "k" && self.field.is_none() {
+            self.open_link_editor();
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if key == "enter" && self.popup == Some(crate::workspace::Popup::Link) {
+            self.apply_text_link(false);
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if key == "escape" && self.popup.is_some() {
             self.field = None;
             self.close_popup();
             cx.stop_propagation();
             cx.notify();
+            return;
+        }
+        if self.popup == Some(crate::workspace::Popup::Context)
+            && command
+            && matches!(key, "c" | "x" | "v" | "a" | "d" | "[" | "]" | "g")
+        {
+            use crate::context_menu::ContextAction;
+            let action = match key {
+                "c" => ContextAction::Copy,
+                "x" => ContextAction::Cut,
+                "v" => ContextAction::Paste,
+                "a" => ContextAction::SelectAll,
+                "d" => ContextAction::Duplicate,
+                "[" => ContextAction::Down,
+                "]" => ContextAction::Up,
+                "g" if m.shift => ContextAction::Ungroup,
+                _ => ContextAction::Group,
+            };
+            self.context_action(action, cx);
+            cx.stop_propagation();
             return;
         }
         if command && (key == "p" || (m.shift && key == "e")) {
@@ -270,6 +318,8 @@ impl Workspace {
         } else if input {
             match key {
                 "escape" => {
+                    self.gesture = crate::workspace::Gesture::None;
+                    self.guides.clear();
                     if self.field.is_some() {
                         self.field = None;
                         self.set_status("Ready", false);
@@ -353,6 +403,8 @@ impl Workspace {
             match key {
                 "escape" => {
                     self.tool = Tool::Select;
+                    self.gesture = crate::workspace::Gesture::None;
+                    self.guides.clear();
                     let parent = self
                         .editor
                         .selected()
@@ -369,8 +421,8 @@ impl Workspace {
                 }
                 "v" => self.tool = Tool::Select,
                 "t" => self.tool = Tool::Text,
-                "r" => self.tool = Tool::Shape,
-                "f" => self.tool = Tool::Frame,
+                "r" if !self.word_mode() => self.tool = Tool::Shape,
+                "f" if !self.word_mode() => self.tool = Tool::Frame,
                 "enter" => {
                     if self.text().is_some() {
                         self.editing = true;
@@ -381,6 +433,9 @@ impl Workspace {
                 }
                 "backspace" | "delete" => self.editor.delete_selected(),
                 "left" | "right" | "up" | "down" => {
+                    if self.word_mode() {
+                        return;
+                    }
                     if self.editor.selected().is_some() {
                         if self
                             .typing
@@ -441,6 +496,10 @@ impl Workspace {
             .field
             .as_ref()
             .filter(|f| f.field == field && f.source == source);
+        if field == Field::Size && source == "floating" {
+            self.selection_control_bounds
+                .insert("float-size-field", bounds);
+        }
         let content = active.map(|f| f.value.as_str()).unwrap_or(display);
         let run = TextRun {
             len: content.len(),

@@ -1,7 +1,7 @@
 # Design
 
 ## Source of truth
-- Status: Active. Refreshed 2026-10-10.
+- Status: Active. Refreshed 2026-10-11.
 - Surface: Compose native document editor.
 - Evidence: user brief, brand/reference-ui.jpg, brand/logo-original.jpg.
 
@@ -9,7 +9,7 @@
 Calm, precise, native. Two offset pages as the mark. Avoid ribbons, dashboard cards, gratuitous gradients and large navigation.
 
 ## Product goals
-Write like a document. Design like a canvas. First milestone: real editing, placement and local save/reopen. Exclude cloud, accounts, AI, presentations and DOCX for now. Success means a user can create and reopen a designed page with text and an image.
+Write like a document. Design like a canvas. Real editing, placement and local save/reopen. Word-compatible documents export editable DOCX. Exclude cloud, accounts, AI, presentations and DOCX import. Success means a user can create and reopen a designed page with text and an image.
 
 ## Personas and jobs
 Students and people making homework, reports, worksheets, posters and covers on desktop.
@@ -162,3 +162,87 @@ Rust + GPUI; Parley owns document text layout. Coordinates in points, zoom only 
   passages, with the existing contextual formatting toolbar.
 - Keep native Edit menu shortcuts (⌘G / ⇧⌘G), clear disabled states for locks and
   non-sibling grouping, and one undo transaction per gesture or batch command.
+
+## Document modes (0.9)
+- Keep the mode visible as Canvas / Word beside zoom and export. The chooser
+  explains the two profiles, switching behavior and new-document shortcuts.
+- Word mode uses a restrained single-column text/image flow. Its inspector shows
+  typography, text color, proportionate image width and reading-order actions.
+  Canvas tools/effects are disabled; DOCX export is enabled only for this profile.
+- Compose remains the default for existing files and keeps the full design editor.
+  DOCX export is disabled. Reject incompatible switching without removing content.
+- Both modes use `.compose` saves. Mode changes are undoable; new documents use
+  unsaved-change prompts. Show overflow warnings and avoid clipped PNG/print output.
+
+## Creating and manipulating documents (0.10)
+- Launch without a file opens a native creation screen. Choose Blank, Report,
+  Letter or Poster and Compose / Word-compatible before creating. File → New
+  returns to this screen; opening a saved file goes directly to its editor.
+- Preset previews render the actual editable document model. All preset text,
+  shapes and layers remain editable; no account, template download or web UI.
+- Explain Word's reading-order layout and unsupported canvas effects before
+  creation. Poster requires Compose. Never silently strip content for DOCX;
+  incompatible documents keep their content and show an actionable explanation.
+- Choosing a preset or opening creation never changes the working document.
+  Creating a replacement respects Save / Discard / Cancel. Cancel returns to
+  the working document without losing changes.
+- In Compose, Text / Shape / Frame drag out their bounds before insertion.
+  A click creates one practical default box; Escape cancels a drawn preview.
+  Reverse drags work, page edges constrain creation, and typing preserves the
+  user's box height while expanding when text needs more room.
+- Single-click selects and drags objects; double-click edits text. Drag the
+  selected text border to move it even while editing. Do not spawn objects on
+  right-click. Word blocks retain reading-order layout and explain this limit.
+- Right-click on canvas objects or Layers opens a compact, edge-clamped menu:
+  text editing / move, clipboard, duplicate, rename, ordering, lock and delete.
+  Preserve highlighted text for its clipboard menu; honor locks and history.
+
+## Résumé and photo presets (0.11)
+- Add a clean single-column résumé that supports both profiles, plus Compose
+  layouts for a portrait résumé, large-photo cover and project portfolio.
+- Real rich text, original embedded photos, separate shapes and descriptive
+  layer names. Photos use proportionate Scale, with editable rounded corners.
+  Replace image uses the existing local/web picker and normal undo history.
+- Keep an eight-layout native gallery in a bounded scroll area. New résumé/photo
+  choices appear in the first row; the original report, letter and poster remain
+  available. The preview always renders the document source, never a mockup.
+- Explain Compose-only layouts and photo replacement near the selected preview.
+  Preserve existing Word/Compose mode rules; never strip columns/effects for DOCX.
+- Validate actual text heights, picture proportions, persistence, Word résumé
+  export, original preset access after scrolling and the minimum native window.
+
+## Drag, links and portable image cutouts (0.12)
+- Drag Layers rows above/below another row to reorder. Show a blue insertion
+  edge and a compact name preview. Canvas order is reversed; Word order follows
+  reading order. Preserve world positions, locks, nesting validity and one undo step.
+- Drag Text/Shape/Frame from Insert or a component from Assets onto the page.
+  Image drops open the picker at the chosen position. Native file-manager image
+  drops decode in the background; importing several is a single undo action.
+- Add links to highlighted text with Ctrl/⌘K, a small toolbar icon, inspector or
+  context menu. Keep selection through editing; Apply, Remove and Open work.
+  Ctrl/⌘-click follows links during editing; Preview uses a normal click.
+  Store links in rich text and preserve clickable DOCX output.
+- User chose cloud background removal for Windows and slower PCs. Use bgclear's
+  documented free preview size only (up to 800 px). No local model/GPU inference.
+  Show the upload/resolution note before the operation. The initial per-user
+  credential setup was replaced by the shared service in 0.13.
+- Image inspector: Remove background and About. Search: Without
+  background downloads then processes the selected original in the background.
+  Preserve originals/placement/style and undo; failures never replace the image.
+- Validate shared engine/API tests and actual native gestures. Windows build
+  workflow is separate from Windows execution claims; hardware performance needs
+  actual old-PC measurement before promising a minimum CPU/RAM experience.
+
+## Shared Compose background service (0.13)
+- Users do not enter API keys or create accounts. Remove background / Without
+  background use one public Compose endpoint; only the owner configures the
+  provider key on the server. The app contains no provider credential handling.
+- Keep one compact About popup explaining upload, preview resolution and shared
+  limits. A build without a connected service says so without offering fake
+  results or returning to the old per-user API-key setup.
+- The Rust service accepts one image, performs a free-preview provider request,
+  and returns a validated transparent PNG. No images/accounts/database are stored.
+- Preserve direct interaction, errors, undo and original geometry. Limits and
+  service failures are understandable; a failed request keeps the original image.
+- Validate a real local relay and actual native button using a controlled provider
+  fixture. Distinguish this from live-provider verification and public deployment.

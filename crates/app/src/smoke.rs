@@ -88,6 +88,17 @@ pub fn native(window: gpui::WindowHandle<crate::workspace::Workspace>, cx: &mut 
             if std::env::args().any(|a| a == "--touchpad") {
                 crate::zoom_smoke::run(window, cx)?;
             }
+            if std::env::args().any(|a| a == "--document-modes") {
+                crate::document_mode_smoke::run(window,cx).await?;
+            }
+            if std::env::args().any(|a| a == "--creation") {
+                crate::creation_smoke::run(window,cx).await?;
+            }
+            if std::env::args().any(|a| a == "--presets") {
+                crate::preset_smoke::run(window,cx).await?;
+            }
+            if std::env::args().any(|a|a=="--actions"){crate::actions_smoke::run(window,cx).await?;}
+            if std::env::args().any(|a|a=="--shared-service"){crate::shared_service_smoke::run(window,cx).await?;}
             Ok::<_, anyhow::Error>(())
         }.await;
         match result {

@@ -6,3 +6,7 @@ edition.workspace = true
 [dependencies]
 serde.workspace = true
 unicode-segmentation.workspace = true
+url = "=2.5.8"
+
+[dev-dependencies]
+serde_json.workspace = true

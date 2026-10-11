@@ -9,12 +9,14 @@ use std::path::{Path, PathBuf};
 pub enum OutputFormat {
     Compose,
     Png,
+    Word,
 }
 impl OutputFormat {
     pub fn extension(self) -> &'static str {
         match self {
             Self::Compose => "compose",
             Self::Png => "png",
+            Self::Word => "docx",
         }
     }
 }
@@ -69,11 +71,23 @@ pub fn write(
             let (w, h) = export::write_png(path, doc, page, dpi)?;
             Ok(format!("PNG exported · {w} × {h} px"))
         }
+        OutputFormat::Word => {
+            export::word::write_docx(path, doc)?;
+            Ok("Word document exported · editable text and images".into())
+        }
     }
 }
 impl Workspace {
     pub fn export_document(&mut self, format: OutputFormat, cx: &mut Context<Self>) {
         if self.busy {
+            return;
+        }
+        if format == OutputFormat::Word && !self.word_mode() {
+            self.set_status(
+                "Word export is available only in Word-compatible mode",
+                true,
+            );
+            cx.notify();
             return;
         }
         self.commit_field();
@@ -191,6 +205,20 @@ impl Workspace {
             .flex_col()
             .gap(px(10.))
             .child(self.output_row(
+                "export-word",
+                "Word document (.docx)",
+                if self.word_mode() {
+                    "Editable text and images · may reflow in Word"
+                } else {
+                    "Available only in Word-compatible mode"
+                },
+                "word",
+                cx,
+                |s, _, cx| s.export_document(OutputFormat::Word, cx),
+            ))
+            .when(!self.word_mode(), |d| d.child(label("Free placement, shapes, rounded images and effects would disappear in Word. Keep this design as Compose, PNG or print; create a Word-compatible document for .docx.").line_height(px(16.))))
+            .when(self.word_mode(), |d| d.child(label("Word may substitute fonts and change line or page breaks. Your editable Compose original stays intact.").line_height(px(16.))))
+            .child(self.output_row(
                 "export-compose",
                 "Compose file",
                 "Editable document · all pages and images",
@@ -270,7 +298,9 @@ impl Workspace {
         cx: &Context<Self>,
         action: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) -> Div {
-        let disabled = self.busy || (id == "print-document" && !cfg!(target_os = "macos"));
+        let disabled = self.busy
+            || (id == "print-document" && !cfg!(target_os = "macos"))
+            || (id == "export-word" && !self.word_mode());
         div()
             .flex()
             .flex_col()

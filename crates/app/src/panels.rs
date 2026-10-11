@@ -44,6 +44,8 @@ impl AssetSource for Assets {
             "preview" => include_bytes!("../../../assets/icons/preview.svg"),
             "export" => include_bytes!("../../../assets/icons/export.svg"),
             "print" => include_bytes!("../../../assets/icons/print.svg"),
+            "word" => include_bytes!("../../../assets/icons/word.svg"),
+            "link" => include_bytes!("../../../assets/icons/link.svg"),
             "group" => include_bytes!("../../../assets/icons/group.svg"),
             "ungroup" => include_bytes!("../../../assets/icons/ungroup.svg"),
             "align-left" => include_bytes!("../../../assets/icons/align-left.svg"),
@@ -104,6 +106,7 @@ impl Workspace {
         let hint: SharedString = match id {
             "preview" => "Preview page",
             "export-menu" => "Export & print · ⇧⌘E",
+            "document-mode" => "Choose Word-compatible or Compose mode",
             "print-document" => "Print document · ⌘P",
             "selection-left" => "Align left edges",
             "selection-center-x" => "Align horizontal centers",
@@ -143,7 +146,15 @@ impl Workspace {
         }
         .to_string()
         .into();
+        let button_entity = cx.entity();
         div()
+            .on_children_prepainted(move |bounds, _, cx| {
+                if let Some(b) = bounds.first() {
+                    button_entity.update(cx, |s, _| {
+                        s.selection_control_bounds.insert(id, *b);
+                    });
+                }
+            })
             .id(id)
             .flex()
             .items_center()
@@ -310,7 +321,7 @@ impl Workspace {
             .bg(rgb(0xffffff))
             .child(
                 div()
-                    .w(px(154.))
+                    .w(px(130.))
                     .flex()
                     .items_center()
                     .gap(px(9.))
@@ -354,7 +365,7 @@ impl Workspace {
                 "",
                 Some("shape"),
                 self.tool == Tool::Shape,
-                false,
+                self.word_mode(),
                 cx,
                 |s, _, _| {
                     s.end_edit();
@@ -366,7 +377,7 @@ impl Workspace {
                 "",
                 Some("frame"),
                 self.tool == Tool::Frame,
-                false,
+                self.word_mode(),
                 cx,
                 |s, _, _| {
                     s.end_edit();
@@ -387,7 +398,7 @@ impl Workspace {
                 "",
                 Some("components"),
                 self.assets_tab,
-                false,
+                self.word_mode(),
                 cx,
                 |s, _, _| {
                     s.assets_tab = !s.assets_tab;
@@ -413,7 +424,7 @@ impl Workspace {
                 |s, _, _| s.undo(true),
             ))
             .child(div().flex_1())
-            .child(div().w(px(154.)).child(self.field_view(
+            .child(div().w(px(130.)).child(self.field_view(
                 Field::DocumentName,
                 "",
                 self.editor.document.name.clone(),
@@ -439,6 +450,15 @@ impl Workspace {
                     s.zoom_by(1.15)
                 }),
             )
+            .child(self.button(
+                "document-mode",
+                if self.word_mode() { "Word" } else { "Canvas" },
+                Some(if self.word_mode() { "word" } else { "page" }),
+                self.popup == Some(Popup::Modes),
+                self.busy,
+                cx,
+                |s, _, _| s.toggle_popup(Popup::Modes),
+            ))
             .child(separator())
             .child(self.button(
                 "preview",
@@ -488,7 +508,12 @@ impl Workspace {
             rows: &mut Div,
             cx: &Context<Workspace>,
         ) {
-            for n in nodes.iter().rev() {
+            for i in 0..nodes.len() {
+                let n = &nodes[if app.word_mode() {
+                    i
+                } else {
+                    nodes.len() - 1 - i
+                }];
                 let id = n.id;
                 let text = matches!(n.kind, NodeKind::Text(_));
                 let ico = if n.is_group {
@@ -502,6 +527,8 @@ impl Workspace {
                     }
                 };
                 let selected = app.editor.is_selected(id);
+                let drag_entity = cx.entity();
+                let drop_bounds = app.layer_bounds.get(&id).copied();
                 let row = div()
                     .id(("layer", id))
                     .flex()
@@ -613,6 +640,48 @@ impl Workspace {
                             }
                             app.focus.focus(window);
                             cx.notify();
+                        }),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |s, e: &MouseDownEvent, w, cx| {
+                            s.open_object_context(Some(id), e.position, w, cx);
+                            cx.stop_propagation();
+                        }),
+                    )
+                    .when(!app.editor.is_locked(id), |d| {
+                        d.on_drag(
+                            crate::drag_drop::LayerDrag {
+                                id,
+                                epoch: app.drag_epoch,
+                                page: app.editor.document.pages[app.editor.page].id,
+                                name: n.name.clone(),
+                            },
+                            move |value, position, _, cx| {
+                                drag_entity.update(cx, |s, _| {
+                                    s.close_popup();
+                                    s.end_edit();
+                                    s.gesture = crate::workspace::Gesture::None;
+                                });
+                                cx.new(|_| crate::drag_drop::DragLabel {
+                                    name: value.name.clone(),
+                                    position,
+                                })
+                            },
+                        )
+                    })
+                    .drag_over::<crate::drag_drop::LayerDrag>(move |style, _, w, _| {
+                        if w.mouse_position().y
+                            < drop_bounds.map(|b| b.center().y).unwrap_or(px(0.))
+                        {
+                            style.border_t_2().border_color(rgb(0x2878ed))
+                        } else {
+                            style.border_b_2().border_color(rgb(0x2878ed))
+                        }
+                    })
+                    .on_drop(
+                        cx.listener(move |s, value: &crate::drag_drop::LayerDrag, w, cx| {
+                            s.drop_layer_row(value, id, w.mouse_position(), cx)
                         }),
                     );
                 let entity = cx.entity();
@@ -758,7 +827,7 @@ impl Workspace {
                             "Assets",
                             Some("components"),
                             self.assets_tab,
-                            false,
+                            self.word_mode(),
                             cx,
                             |s, _, _| s.assets_tab = true,
                         )
@@ -830,25 +899,44 @@ impl Workspace {
                         div()
                             .flex()
                             .gap(px(4.))
-                            .child(self.button(
+                            .child(self.capture_control(
                                 "insert-text",
-                                "Text",
-                                Some("text"),
-                                false,
-                                false,
+                                self.draggable_insert(
+                                    self.button(
+                                        "insert-text",
+                                        "Text",
+                                        Some("text"),
+                                        false,
+                                        false,
+                                        cx,
+                                        |s, _, _| {
+                                            s.insert_at(
+                                                Tool::Text,
+                                                document::Point { x: 48., y: 64. },
+                                            )
+                                        },
+                                    ),
+                                    crate::drag_drop::InsertKind::Tool(Tool::Text),
+                                    cx,
+                                ),
                                 cx,
-                                |s, _, _| {
-                                    s.insert_at(Tool::Text, document::Point { x: 48., y: 64. })
-                                },
                             ))
-                            .child(self.button(
+                            .child(self.capture_control(
                                 "insert-image",
-                                "Image",
-                                Some("image"),
-                                false,
-                                self.busy,
+                                self.draggable_insert(
+                                    self.button(
+                                        "insert-image",
+                                        "Image",
+                                        Some("image"),
+                                        false,
+                                        self.busy,
+                                        cx,
+                                        |s, _, cx| s.open_image_picker(cx),
+                                    ),
+                                    crate::drag_drop::InsertKind::Image,
+                                    cx,
+                                ),
                                 cx,
-                                |s, _, cx| s.open_image_picker(cx),
                             )),
                     )
                     .child(
@@ -856,27 +944,49 @@ impl Workspace {
                             .mt(px(5.))
                             .flex()
                             .gap(px(4.))
-                            .child(self.button(
+                            .child(self.capture_control(
                                 "insert-shape",
-                                "Shape",
-                                Some("shape"),
-                                false,
-                                false,
+                                self.draggable_insert(
+                                    self.button(
+                                        "insert-shape",
+                                        "Shape",
+                                        Some("shape"),
+                                        false,
+                                        self.word_mode(),
+                                        cx,
+                                        |s, _, _| {
+                                            s.insert_at(
+                                                Tool::Shape,
+                                                document::Point { x: 64., y: 120. },
+                                            )
+                                        },
+                                    ),
+                                    crate::drag_drop::InsertKind::Tool(Tool::Shape),
+                                    cx,
+                                ),
                                 cx,
-                                |s, _, _| {
-                                    s.insert_at(Tool::Shape, document::Point { x: 64., y: 120. })
-                                },
                             ))
-                            .child(self.button(
+                            .child(self.capture_control(
                                 "insert-frame",
-                                "Frame",
-                                Some("frame"),
-                                false,
-                                false,
+                                self.draggable_insert(
+                                    self.button(
+                                        "insert-frame",
+                                        "Frame",
+                                        Some("frame"),
+                                        false,
+                                        self.word_mode(),
+                                        cx,
+                                        |s, _, _| {
+                                            s.insert_at(
+                                                Tool::Frame,
+                                                document::Point { x: 64., y: 120. },
+                                            )
+                                        },
+                                    ),
+                                    crate::drag_drop::InsertKind::Tool(Tool::Frame),
+                                    cx,
+                                ),
                                 cx,
-                                |s, _, _| {
-                                    s.insert_at(Tool::Frame, document::Point { x: 64., y: 120. })
-                                },
                             )),
                     ),
             )
@@ -973,6 +1083,14 @@ impl Workspace {
         if self.editor.selection_count() > 1
             || self.editor.selected_node().is_some_and(|n| n.is_group)
         {
+            if self.word_mode() {
+                return panel
+                    .child(self.section(
+                        "Word selection",
+                        label(format!("{} blocks selected", self.editor.selection_count())),
+                    ))
+                    .child(self.word_order_controls(cx));
+            }
             return panel.child(self.selection_inspector(cx));
         }
         let Some(node) = self.editor.selected_node() else {
@@ -1025,6 +1143,22 @@ impl Workspace {
             self.field_view(Field::Name, "", node.name.clone(), cx),
         ));
         if let NodeKind::Text(t) = &node.kind {
+            panel = panel.child(self.section(
+                "Text link",
+                self.capture_control(
+                    "inspector-link",
+                    self.button(
+                        "inspector-link",
+                        "Add / edit link…",
+                        Some("link"),
+                        false,
+                        self.selection_locked(),
+                        cx,
+                        |s, _, _| s.open_link_editor(),
+                    ),
+                    cx,
+                ),
+            ));
             panel = panel.child(
                 self.section(
                     "Typography",
@@ -1128,14 +1262,22 @@ impl Workspace {
             panel = panel.child(self.section(
                 "Image content",
                 div().flex().flex_col().gap(px(8.))
-                    .child(self.button("replace-image", "Replace image…", Some("image"), false, false, cx,
-                        |s, _, cx| s.open_image_replacement(cx)))
+                    .child(self.capture_control("replace-image",self.button("replace-image", "Replace image…", Some("image"), false, false, cx,
+                        |s, _, cx| s.open_image_replacement(cx)),cx))
+                    .child(self.capture_control("remove-background",self.button("remove-background",if self.cutout_target==Some(node.id){"Removing…"}else{"Remove background"},Some("clear-style"),false,self.cutout_target.is_some(),cx,|s,_,cx|s.remove_image_background(cx)),cx))
+                    .child(label("Compose service · no key needed · previews up to 800 px"))
+                    .child(self.button("background-settings","About background removal…",None,false,false,cx,|s,_,_|s.open_background_settings()))
                     .child(label(if node.image_sizing == document::ImageSizing::Scale {
                         "Keeps position, width and style. Height follows the new proportions."
                     } else {
                         "Keeps position, size and style."
                     })),
             ));
+            if self.word_mode() {
+                return panel
+                    .child(self.image_source_panel(cx))
+                    .child(self.word_node_properties(cx));
+            }
             let scale = node.image_sizing == document::ImageSizing::Scale;
             panel = panel.child(
                 self.section(
@@ -1221,6 +1363,9 @@ impl Workspace {
         }
         if is_image {
             panel = panel.child(self.image_source_panel(cx));
+        }
+        if self.word_mode() {
+            return panel.child(self.word_node_properties(cx));
         }
         let r = node.frame;
         panel = panel.child(
@@ -1572,6 +1717,9 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.creation.is_some() {
+            return self.creation_view(cx);
+        }
         let entity = cx.entity();
         let mut center = div()
             .relative()
@@ -1587,6 +1735,15 @@ impl Render for Workspace {
                     .cursor(self.canvas_cursor())
                     .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
                     .on_mouse_down(MouseButton::Middle, cx.listener(Self::mouse_down))
+                    .on_mouse_down(MouseButton::Right, cx.listener(Self::canvas_context_menu))
+                    .on_drop(
+                        cx.listener(|s, value: &crate::drag_drop::InsertDrag, w, cx| {
+                            s.drop_insert(value, w.mouse_position(), cx)
+                        }),
+                    )
+                    .on_drop(cx.listener(|s, value: &ExternalPaths, w, cx| {
+                        s.import_dropped_files(value, w.mouse_position(), cx)
+                    }))
                     .on_scroll_wheel(cx.listener(Self::scroll))
                     .child(
                         canvas(
@@ -1613,6 +1770,9 @@ impl Render for Workspace {
             .font_family(".SystemUIFont")
             .track_focus(&self.focus)
             .on_action(cx.listener(|s, _: &crate::NewDocument, _, cx| s.request(Pending::New, cx)))
+            .on_action(
+                cx.listener(|s, _: &crate::NewWordDocument, _, cx| s.request(Pending::NewWord, cx)),
+            )
             .on_action(cx.listener(|s, _: &crate::OpenDocument, _, cx| s.choose_file(false, cx)))
             .on_action(cx.listener(|s, _: &crate::SaveDocument, _, cx| s.save(false, cx)))
             .on_action(cx.listener(|s, _: &crate::SaveAs, _, cx| s.save(true, cx)))
@@ -1626,6 +1786,11 @@ impl Render for Workspace {
             .on_action(cx.listener(|s, _: &crate::ExportPng, _, cx| {
                 s.export_document(crate::output::OutputFormat::Png, cx)
             }))
+            .when(self.word_mode(), |d| {
+                d.on_action(cx.listener(|s, _: &crate::ExportWord, _, cx| {
+                    s.export_document(crate::output::OutputFormat::Word, cx)
+                }))
+            })
             .on_action(cx.listener(|s, _: &crate::PrintDocument, _, cx| s.print_document(cx)))
             .on_action(cx.listener(|s, _: &crate::GroupSelection, _, cx| {
                 s.group_selection();
@@ -1697,73 +1862,7 @@ impl Render for Workspace {
             root = root.child(self.popup_view(cx));
         }
         if self.pending.is_some() {
-            root =
-                root.child(
-                    div()
-                        .occlude()
-                        .absolute()
-                        .inset_0()
-                        .bg(rgba(0x171e1740))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            div()
-                                .w(px(370.))
-                                .p(px(24.))
-                                .bg(rgb(0xffffff))
-                                .rounded(px(9.))
-                                .shadow_lg()
-                                .child(
-                                    div()
-                                        .text_size(px(18.))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child("Save your changes?"),
-                                )
-                                .child(
-                                    div().mt(px(12.)).mb(px(22.)).text_color(rgb(MUTED)).child(
-                                        "This document has changes that haven’t been saved.",
-                                    ),
-                                )
-                                .child(
-                                    div()
-                                        .flex()
-                                        .justify_end()
-                                        .gap(px(6.))
-                                        .child(self.button(
-                                            "cancel-pending",
-                                            "Cancel",
-                                            None,
-                                            false,
-                                            self.busy,
-                                            cx,
-                                            |s, _, _| s.pending = None,
-                                        ))
-                                        .child(self.button(
-                                            "discard-pending",
-                                            "Discard",
-                                            None,
-                                            false,
-                                            self.busy,
-                                            cx,
-                                            |s, _, cx| {
-                                                if let Some(p) = s.pending.take() {
-                                                    s.execute(p, cx)
-                                                }
-                                            },
-                                        ))
-                                        .child(self.button(
-                                            "save-pending",
-                                            "Save",
-                                            None,
-                                            true,
-                                            self.busy,
-                                            cx,
-                                            |s, _, cx| s.save(false, cx),
-                                        )),
-                                ),
-                        ),
-                );
+            root = root.child(self.unsaved_prompt(cx));
         }
         root
     }

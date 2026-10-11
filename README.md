@@ -12,8 +12,10 @@ Electron or webviews.
 ![Compose's native editor with multiple selection and design controls](docs/screenshots/editor.png)
 
 Compose is in active development. macOS is currently tested; Windows/Linux
-packaging and interaction checks are still pending. It uses its own editable
-`.compose` files; DOCX import/export is not implemented yet.
+interaction checks are still pending; native Windows packaging is included.
+It uses its own editable
+`.compose` files in both modes. Word-compatible mode can export editable DOCX;
+DOCX import is not implemented yet.
 
 ## Run
 
@@ -39,6 +41,9 @@ not a notarized distribution. macOS is the platform tested in this workspace.
 Linux/Windows support still needs platform-specific builds and interaction QA.
 
 ## Working features
+
+- Two document modes: Word-compatible text/image layouts with editable DOCX
+  export, and the full Compose canvas with shapes, frames, groups and effects.
 
 - Six bundled typefaces with actual family previews, live search, real weights,
   italic variants where available, and seven typography presets.
@@ -112,7 +117,7 @@ Escape cancels. Colors accept six-digit hex. Double-click a layer to rename it.
 
 Clipboard currently handles text. Object duplication uses Cmd/Ctrl+D. Text is
 edited in independent boxes; automatic flow between pages, lists, tables,
-rotation, vector PDF/HTML/DOCX export, collaboration and cloud features are later work.
+rotation, vector PDF/HTML export, DOCX import, collaboration and cloud features are later work.
 System fallback typography, screen-reader support and large-image performance
 need more validation. IME range handling is tested; all OS/language candidate
 window behavior is not yet certified.
@@ -271,3 +276,143 @@ cargo run -p compose -- --ui-smoke --touchpad --compact
 
 Compose's original source code is MIT licensed. Vendored GPUI retains its
 Apache-2.0 license, and bundled fonts retain their included font licenses.
+
+## Word-compatible and Compose modes (0.9)
+
+The **Canvas / Word** button in the toolbar opens the document mode chooser.
+**Compose** keeps the freeform editor: shapes, frames, groups, effects, image
+corners and arbitrary placement. Compose-mode documents cannot export DOCX;
+the option is disabled and the exporter enforces that restriction.
+
+**Word-compatible** uses editable text and proportionate images in reading order
+with one-inch page margins. The inspector provides typography, text color, image
+width and block order controls. Shapes, groups, free placement, transparency and
+canvas effects are disabled. **Export → Word document (.docx)** produces real
+paragraphs, styled runs and embedded images, with page settings and section breaks.
+Font sizes, bold/italic/underline, colors, letter spacing, alignment and line
+spacing are retained. Word may substitute missing fonts and reflow content; exact
+pagination is not guaranteed. Install the bundled font families for closer output.
+
+Both modes save editable `.compose` files, preserving the mode. Old files default
+to Compose. A compatible canvas can switch to Word mode and reflow; Undo restores
+its previous layout. A canvas using unsupported features cannot switch without
+losing them, so the chooser offers **New Word document** instead. New documents
+respect the normal unsaved-change prompt. **File → New Word-compatible document…**
+opens the creation screen with Word mode selected.
+
+Word-mode blocks currently flow within explicit Compose pages; text is not linked
+between pages automatically. Oversized blocks show a warning. DOCX keeps their
+complete text for Word to paginate; PNG/Print rejects overflow instead of silently
+clipping it. Split oversized blocks across pages before using those outputs.
+
+```sh
+cargo run -p compose -- --ui-smoke --document-modes --compact
+# Inspect the mode chooser and the real compatible editor:
+cargo run -p compose -- --ui-smoke-hold --document-modes --compact
+```
+
+## Create a document (0.11)
+
+Opening Compose without a file shows the native creation screen. Choose **Blank
+page**, **Résumé**, **Photo résumé**, **Photo cover**, **Report**, **Letter**,
+**Portfolio** or **Poster**, select **Compose** or
+**Word-compatible**, name the document and click **Create document**. The preview
+renders the actual document. Every preset creates editable text and layers;
+The gallery scrolls to the second row at compact window sizes. Résumé works in
+both modes; Photo résumé, Photo cover, Portfolio and Poster require Compose to
+preserve their columns, placement, rounded images and shapes.
+
+**Open document…** reopens a `.compose` file. Opening one from the command line
+goes directly to its editor. **File → New document…** / **⌘N** returns to the
+creation screen. Choosing presets leaves your current document intact. Creating
+its replacement prompts to save unsaved changes; **Back to document** returns
+without replacing it. Both modes save locally as `.compose`.
+
+In Compose, choose **Text (T)** and drag on the page to draw the box's width and
+height. A simple click inserts one default box. Shape and Frame use the same
+drag-to-size behavior, including reverse drags; **Escape** cancels before insertion.
+Typing retains your chosen height and expands it as needed. Single-click and drag
+to move an object; double-click to edit text. Drag the selected text border to
+move its box while editing, or right-click and choose **Select / move text box**.
+Word text retains its reading-order layout and fixed column width.
+
+Right-click objects or Layers for working clipboard, duplicate, rename, order,
+lock/unlock and delete actions. Highlighted text keeps its range for copying.
+Locked objects can be inspected and unlocked through this menu, while dragging
+and editing stay blocked. The export menu explains which canvas features would
+be lost in Word; Compose-mode DOCX export stays disabled, so nothing is silently
+removed from your file.
+
+```sh
+cargo run -p compose -- --ui-smoke --creation --document-modes --compact
+```
+
+The **Résumé** contains editable name, contact details, profile, experience,
+education and skills. **Photo résumé** adds a portrait and two-column layout.
+**Photo cover** pairs a large image with an editorial title; **Portfolio** adds
+project details and a large work sample. Their photographs are normal image
+layers: select one and choose **Replace image…** to use a local file or web search.
+The original bytes, proportions and editable corners survive `.compose` reopening.
+No network access is needed to use a preset. Generated sample images and their
+prompts are documented in [assets/presets/SOURCES.md](assets/presets/SOURCES.md).
+
+```sh
+cargo run -p compose -- --ui-smoke --presets --compact
+# Inspect the native gallery or editable portrait résumé:
+cargo run -p compose -- --ui-smoke-hold --presets --compact
+cargo run -p compose -- --ui-smoke-hold --presets --show-photo-editor
+```
+
+## Drag, hyperlinks and background removal (0.12)
+
+Drag rows in **Layers** to reorder them. The blue edge shows the drop location.
+Canvas stacking changes without moving objects; Word mode reflows its reading
+order. Layers may move between existing groups by dropping beside a layer in the
+destination group; invalid nesting and locked content are rejected.
+
+Drag Text, Shape or Frame from **Insert**, or a component from **Assets**, onto
+the page. Dragging Image opens its picker at that position. Drop image files from
+Finder/Explorer directly onto the page; up to 16 are decoded in the background
+and inserted as one undo operation. Dropping a `.compose` file opens it with the
+normal unsaved-change protection.
+
+Highlight text and press **Ctrl/⌘K**, or use the link icon, right-click menu or
+inspector. Apply a web or email address, edit/remove it, or open it. **Ctrl/⌘-click**
+follows links in the editor; Preview uses a normal click. Links retain their range
+through formatting, clipboard and `.compose` saves, and export as clickable Word
+hyperlinks. PNG and the current raster print/PDF output preserve their appearance
+but cannot carry interactive links.
+
+**Remove background** in the image inspector and **Without background** in image
+search now use one shared Compose service. Users need **no account or API key**.
+The desktop app contains only the public service address; the provider key stays
+on the server. The selected image is uploaded when requested, and a transparent
+preview PNG is returned. Shared usage limits apply. Position/style, original
+pixels and Undo are preserved; failed or stale replies keep the working image.
+There is no desktop ML runtime, model download or GPU inference requirement.
+
+The server uses [bgclear's preview API](https://www.bgclear.ai/api-docs/) with
+`size=preview` (up to 800 px); paid full-resolution size is never requested.
+Deployment files and operator instructions are in
+[services/background/README.md](services/background/README.md). The service is a
+separate Rust executable with bounded requests, concurrency and shared limits;
+it stores no images and has no user accounts/database.
+
+Release builders set the **public** `COMPOSE_BACKGROUND_SERVICE_URL` before
+packaging. Normal users do not configure anything. A local runtime override can
+point to `http://127.0.0.1:8787/v1/background/remove` during development. Builds
+without an endpoint explain that the service is not connected yet. The local
+pipeline is tested with a real relay and controlled provider responses; going
+live still requires a provider key in the server's secret settings.
+The root `render.yaml` creates a Render Free Docker service in Frankfurt.
+Render Free can sleep after 15 idle minutes; Compose checks health before
+uploading and allows up to two minutes for the service to wake.
+
+Windows development needs Rust's MSVC toolchain and Visual Studio C++ Build Tools
+with the Windows SDK (GPUI compiles its DirectX shaders using `fxc.exe`). Run
+`./scripts/package-windows.ps1` for an optimized portable Windows ZIP. The
+GitHub CI publication and Windows GUI/hardware QA are still pending.
+
+```sh
+cargo run -p compose -- --ui-smoke --actions --compact
+```

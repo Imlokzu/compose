@@ -116,6 +116,21 @@ impl Workspace {
             .filter(|m| m.len() <= 16 * 1024 * 1024)
             .and_then(|m| serde_json::from_str::<RichText>(m).ok())
             .filter(|t| t.validate() && item.text().as_deref() == Some(&t.content));
+        if self.word_mode() {
+            let unsupported = rich.as_ref().is_some_and(|text| {
+                text.style.color.a != 255 || text.spans.iter().any(|s| s.style.color.a != 255)
+            }) || item.text().is_some_and(|s| {
+                s.chars()
+                    .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+            });
+            if unsupported {
+                self.set_status(
+                    "This paste contains text styling or characters Word mode cannot preserve",
+                    true,
+                );
+                return;
+            }
+        }
         if self.editing {
             if self.selection_locked() {
                 return;

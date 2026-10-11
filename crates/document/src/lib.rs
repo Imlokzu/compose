@@ -1,10 +1,27 @@
 use serde::{Deserialize, Serialize};
+pub mod presets;
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
 };
 pub use text::Color;
 pub type NodeId = u64;
+pub const WORD_MARGIN: f32 = 72.;
+pub const WORD_BLOCK_GAP: f32 = 12.;
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DocumentMode {
+    #[default]
+    Compose,
+    Word,
+}
+impl DocumentMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Compose => "Compose",
+            Self::Word => "Word",
+        }
+    }
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     pub x: f32,
@@ -112,6 +129,8 @@ pub struct Page {
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Document {
+    #[serde(default)]
+    pub mode: DocumentMode,
     pub name: String,
     pub pages: Vec<Page>,
     #[serde(skip)]
@@ -121,6 +140,7 @@ pub struct Document {
 impl Default for Document {
     fn default() -> Self {
         Self {
+            mode: DocumentMode::Compose,
             name: "Untitled".into(),
             pages: vec![Page {
                 id: 1,
@@ -157,6 +177,82 @@ fn find_mut(nodes: &mut [Node], id: NodeId) -> Option<&mut Node> {
     None
 }
 impl Document {
+    pub fn word_overflows(&self, page: usize) -> bool {
+        self.mode == DocumentMode::Word
+            && self.pages.get(page).is_some_and(|p| {
+                p.nodes
+                    .iter()
+                    .any(|n| n.visible && n.frame.y + n.frame.height > p.height - WORD_MARGIN + 0.1)
+            })
+    }
+    pub fn word_issues(&self) -> Vec<String> {
+        let mut issues = Vec::new();
+        for (index, page) in self.pages.iter().enumerate() {
+            if page.width <= 2. * WORD_MARGIN + 40.
+                || page.height <= 2. * WORD_MARGIN + 40.
+                || page.width > 1584.
+                || page.height > 1584.
+            {
+                issues.push(format!(
+                    "Page {} must fit Word's page sizes with 1-inch margins",
+                    index + 1
+                ));
+            }
+            for node in &page.nodes {
+                if !matches!(node.kind, NodeKind::Text(_) | NodeKind::Image { .. })
+                    || !node.children.is_empty()
+                    || node.is_group
+                {
+                    issues.push(format!(
+                        "{} uses canvas shapes, frames or groups",
+                        node.name
+                    ));
+                    continue;
+                }
+                if node.opacity != 1.
+                    || node.radius != 0.
+                    || node.appearance.stroke_width != 0.
+                    || node.appearance.shadow
+                    || node.image_sizing != ImageSizing::Scale
+                {
+                    issues.push(format!(
+                        "{} uses canvas effects or image stretching",
+                        node.name
+                    ));
+                }
+                if let NodeKind::Text(text) = &node.kind {
+                    if text.style.color.a != 255
+                        || text.spans.iter().any(|s| s.style.color.a != 255)
+                    {
+                        issues.push(format!("{} uses transparent text color", node.name));
+                    }
+                    if text
+                        .content
+                        .chars()
+                        .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+                    {
+                        issues.push(format!(
+                            "{} contains text characters Word cannot store",
+                            node.name
+                        ));
+                    }
+                }
+            }
+            if issues.len() > 20 {
+                break;
+            }
+        }
+        issues
+    }
+    pub fn validate_word(&self) -> Result<(), String> {
+        if self.mode != DocumentMode::Word {
+            return Err("Word export is available only in Word mode".into());
+        }
+        if let Some(issue) = self.word_issues().first() {
+            return Err(issue.clone());
+        }
+        Ok(())
+    }
     pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.pages.iter().find_map(|p| find(&p.nodes, id))
     }
@@ -205,6 +301,9 @@ impl Document {
         }
     }
     pub fn validate(&self) -> Result<(), String> {
+        if self.mode == DocumentMode::Word {
+            self.validate_word()?;
+        }
         if self.pages.is_empty() || self.pages.len() > 500 {
             return Err("Document must contain 1–500 pages".into());
         }

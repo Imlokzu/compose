@@ -143,6 +143,14 @@ impl Workspace {
                     .border_color(rgb(0x2878ed)),
             );
         }
+        if let Gesture::Create { start, current, .. } = self.gesture {
+            let r = self.drawn_box(start, current);
+            window.paint_quad(
+                fill(self.screen_rect(r), rgba(0x2878ed0a))
+                    .border_widths(px(1.))
+                    .border_color(rgb(0x2878ed)),
+            );
+        }
         if !self.preview
             && !self.editing
             && !self.selection_locked()
@@ -318,7 +326,19 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.pending.is_some() || self.preview {
+        if self.pending.is_some() || self.creation.is_some() || self.busy {
+            return;
+        }
+        if event.button == MouseButton::Left
+            && (self.preview || event.modifiers.platform || event.modifiers.control)
+            && self.popup.is_none()
+            && let Some(url) = self.link_at_screen(event.position)
+        {
+            cx.open_url(&url);
+            cx.stop_propagation();
+            return;
+        }
+        if self.preview {
             return;
         }
         self.close_popup();
@@ -334,6 +354,25 @@ impl Workspace {
             return;
         }
         let p = self.to_doc(event.position);
+        if self.editing
+            && !self.word_mode()
+            && !self.selection_locked()
+            && let Some(id) = self.editor.selected()
+            && let Some(frame) = self.absolute_frame(id)
+            && self.text_border_contains(frame, p)
+        {
+            self.end_edit();
+            self.tool = Tool::Select;
+            self.gesture = Gesture::Move {
+                start: p,
+                frame,
+                frames: self.editor.selection_frames(),
+                collapse: None,
+                started: false,
+            };
+            cx.notify();
+            return;
+        }
         if !self.preview
             && !self.editing
             && !self.selection_locked()
@@ -405,8 +444,15 @@ impl Workspace {
                 .is_some_and(|n| matches!(n.kind, NodeKind::Text(_)))
         });
         if self.tool != Tool::Select && !(self.tool == Tool::Text && text_target) {
-            self.insert_at(self.tool, p);
-            self.measure();
+            if self.word_mode() && self.tool != Tool::Text {
+                return;
+            }
+            self.end_edit();
+            self.gesture = Gesture::Create {
+                start: p,
+                current: p,
+                tool: self.tool,
+            };
             cx.notify();
             return;
         }
@@ -462,6 +508,11 @@ impl Workspace {
                     return;
                 }
                 let frame = self.editor.selection_bounds().unwrap();
+                if self.word_mode() {
+                    self.gesture = Gesture::None;
+                    cx.notify();
+                    return;
+                }
                 self.gesture = Gesture::Move {
                     start: p,
                     frame,
@@ -511,6 +562,11 @@ impl Workspace {
         let p = self.to_doc(event.position);
         let gesture = std::mem::replace(&mut self.gesture, Gesture::None);
         self.gesture = match gesture {
+            Gesture::Create { start, tool, .. } => Gesture::Create {
+                start,
+                current: p,
+                tool,
+            },
             Gesture::Pan { start, pan } => {
                 self.pan = DocPoint {
                     x: pan.x + f32::from(event.position.x - start.x),
@@ -668,14 +724,20 @@ impl Workspace {
         };
         cx.notify();
     }
-    pub fn mouse_up(
-        &mut self,
-        _event: &MouseUpEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn mouse_up(&mut self, event: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(p) = &mut self.picker {
             p.drag = None;
+        }
+        if event.button == MouseButton::Left
+            && let Gesture::Create { start, tool, .. } = self.gesture
+        {
+            let current = self.to_doc(event.position);
+            if (current.x - start.x).abs() + (current.y - start.y).abs() > 4. / self.zoom {
+                self.insert_box(tool, self.drawn_box(start, current));
+            } else {
+                self.insert_at(tool, start);
+            }
+            self.measure();
         }
         if let Gesture::Move {
             started: false,
@@ -708,10 +770,37 @@ impl Workspace {
         }
         cx.notify();
     }
+    pub fn drawn_box(&self, start: DocPoint, current: DocPoint) -> Rect {
+        let page = &self.editor.document.pages[self.editor.page];
+        let min_w = page.width.min(16.);
+        let min_h = page.height.min(16.);
+        let x = start.x.min(current.x).clamp(0., page.width - min_w);
+        let y = start.y.min(current.y).clamp(0., page.height - min_h);
+        let right = start.x.max(current.x).clamp(x + min_w, page.width);
+        let bottom = start.y.max(current.y).clamp(y + min_h, page.height);
+        Rect::new(x, y, right - x, bottom - y)
+    }
+    pub fn text_border_contains(&self, r: Rect, p: DocPoint) -> bool {
+        let tolerance = 5. / self.zoom;
+        let outer = Rect::new(
+            r.x - tolerance,
+            r.y - tolerance,
+            r.width + 2. * tolerance,
+            r.height + 2. * tolerance,
+        );
+        outer.contains(p)
+            && (p.x < r.x
+                || p.x > r.x + r.width
+                || (p.y - r.y).abs() <= 2. / self.zoom
+                || (p.y - r.y - r.height).abs() <= 2. / self.zoom)
+    }
 }
 
 impl Workspace {
     pub fn radius_handle(&self, r: Rect) -> Option<DocPoint> {
+        if self.word_mode() {
+            return None;
+        }
         let n = self.editor.selected_node()?;
         if n.is_group
             || matches!(n.kind, NodeKind::Text(_))
@@ -730,9 +819,18 @@ impl Workspace {
 
 impl Workspace {
     pub fn resizable_selection(&self) -> bool {
-        self.editor.selected_node().is_some_and(|n| !n.is_group)
+        self.editor.selected_node().is_some_and(|n| {
+            !n.is_group && (!self.word_mode() || matches!(n.kind, NodeKind::Image { .. }))
+        })
     }
     pub fn canvas_cursor(&self) -> CursorStyle {
+        if self.preview
+            && self
+                .last_pointer
+                .is_some_and(|p| self.link_at_screen(p).is_some())
+        {
+            return CursorStyle::PointingHand;
+        }
         fn resize(handle: usize) -> CursorStyle {
             match handle {
                 0 | 4 => CursorStyle::ResizeUpLeftDownRight,
@@ -746,10 +844,20 @@ impl Workspace {
                 return CursorStyle::ClosedHand;
             }
             Gesture::Resize { handle, .. } => return resize(handle),
-            Gesture::Radius { .. } => return CursorStyle::Crosshair,
+            Gesture::Radius { .. } | Gesture::Create { .. } => return CursorStyle::Crosshair,
             _ => {}
         }
         if self.space_held {
+            return CursorStyle::OpenHand;
+        }
+        if self.editing
+            && !self.word_mode()
+            && !self.selection_locked()
+            && let Some(pointer) = self.last_pointer
+            && let Some(id) = self.editor.selected()
+            && let Some(frame) = self.absolute_frame(id)
+            && self.text_border_contains(frame, self.to_doc(pointer))
+        {
             return CursorStyle::OpenHand;
         }
         if !self.editing
@@ -771,9 +879,9 @@ impl Workspace {
                 }
             }
         }
-        if self.editing || self.tool == Tool::Text {
+        if self.editing {
             CursorStyle::IBeam
-        } else if self.tool == Tool::Shape || self.tool == Tool::Frame {
+        } else if self.tool != Tool::Select {
             CursorStyle::Crosshair
         } else {
             CursorStyle::Arrow

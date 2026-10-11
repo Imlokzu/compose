@@ -18,3 +18,7 @@ The macOS view registers `magnifyWithEvent:` and converts AppKit magnification,
 phase, position and modifiers into that event. Window dispatch handles it as a
 mouse-positioned input event. The application subscribes through the existing
 paint-phase `Window::on_mouse_event` API; no renderer/layout code is changed.
+
+Compose 0.12 exposes `ExternalPaths::new` to construct the same file-drop payload
+as the native OS backends. This allows event-dispatch tests for file-manager drops;
+the path handling and drag/drop implementations are unchanged.

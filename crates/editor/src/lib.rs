@@ -1,5 +1,6 @@
 mod clipboard;
 mod components;
+mod layer_drop;
 mod selection;
 pub use clipboard::ObjectClipboard;
 pub use components::Component;
@@ -19,6 +20,7 @@ pub struct Editor {
     selection: Vec<NodeId>,
     undo: Vec<Snapshot>,
     redo: Vec<Snapshot>,
+    batch: bool,
 }
 impl Default for Editor {
     fn default() -> Self {
@@ -34,6 +36,7 @@ impl Editor {
             selection: vec![],
             undo: vec![],
             redo: vec![],
+            batch: false,
         }
     }
     fn snapshot(&self) -> Snapshot {
@@ -51,6 +54,9 @@ impl Editor {
         self.page = s.page;
     }
     pub fn checkpoint(&mut self) {
+        if self.batch {
+            return;
+        }
         let s = self.snapshot();
         if self.undo.last().is_none_or(|last| {
             last.document != s.document || last.selection != s.selection || last.page != s.page
@@ -70,6 +76,13 @@ impl Editor {
         } else {
             false
         }
+    }
+    pub fn begin_batch(&mut self) {
+        self.checkpoint();
+        self.batch = true;
+    }
+    pub fn end_batch(&mut self) {
+        self.batch = false;
     }
     pub fn redo(&mut self) -> bool {
         if let Some(s) = self.redo.pop() {
@@ -168,6 +181,9 @@ impl Editor {
     }
     /// Reparent without changing world-space geometry. Cycles are rejected.
     pub fn reparent_selected(&mut self, parent: Option<NodeId>) -> bool {
+        if self.document.mode == document::DocumentMode::Word {
+            return false;
+        }
         if self.selection.len() != 1 || self.selection_locked() {
             return false;
         }
@@ -213,15 +229,19 @@ impl Editor {
         true
     }
     pub fn hit_test(&self, p: Point) -> Option<NodeId> {
-        self.hit(p, false)
+        self.hit(p, false, false)
     }
     pub fn hit_test_deep(&self, p: Point) -> Option<NodeId> {
-        self.hit(p, true)
+        self.hit(p, true, false)
     }
-    fn hit(&self, p: Point, deep: bool) -> Option<NodeId> {
-        fn hit(nodes: &[Node], p: Point, deep: bool) -> Option<NodeId> {
+    /// Context menus can inspect/unlock visible locked objects. Mutation guards still apply.
+    pub fn hit_test_context(&self, p: Point, deep: bool) -> Option<NodeId> {
+        self.hit(p, deep, true)
+    }
+    fn hit(&self, p: Point, deep: bool, include_locked: bool) -> Option<NodeId> {
+        fn hit(nodes: &[Node], p: Point, deep: bool, include_locked: bool) -> Option<NodeId> {
             for n in nodes.iter().rev() {
-                if !n.visible || n.locked {
+                if !n.visible || (n.locked && !include_locked) {
                     continue;
                 }
                 let local = Point {
@@ -231,7 +251,7 @@ impl Editor {
                 if n.is_group && !deep && n.frame.contains(p) {
                     return Some(n.id);
                 }
-                if let Some(id) = hit(&n.children, local, deep) {
+                if let Some(id) = hit(&n.children, local, deep, include_locked) {
                     return Some(id);
                 }
                 if n.frame.contains(p) {
@@ -240,12 +260,30 @@ impl Editor {
             }
             None
         }
-        hit(&self.document.pages[self.page].nodes, p, deep)
+        hit(
+            &self.document.pages[self.page].nodes,
+            p,
+            deep,
+            include_locked,
+        )
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn context_hits_locked_visible_objects_without_enabling_mutations() {
+        let mut editor = Editor::default();
+        let id = editor.insert(NodeKind::Shape, Rect::new(10., 10., 80., 80.));
+        editor.toggle_lock(id);
+        let p = Point { x: 40., y: 40. };
+        assert_eq!(editor.hit_test(p), None);
+        assert_eq!(editor.hit_test_context(p, false), Some(id));
+        editor.delete_selected();
+        assert!(editor.document.node(id).is_some());
+        editor.toggle_visibility(id);
+        assert_eq!(editor.hit_test_context(p, true), None);
+    }
     #[test]
     fn edits_and_layer_order_undo() {
         let mut e = Editor::default();

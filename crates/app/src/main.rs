@@ -1,20 +1,31 @@
+mod actions_smoke;
 mod canvas;
 mod clipboard;
+mod context_menu;
+mod creation;
+mod creation_smoke;
+mod cutout;
 mod design_actions;
 mod design_panels;
+mod document_mode;
+mod document_mode_smoke;
+mod drag_drop;
 mod image_picker;
 mod image_picker_smoke;
 mod image_picker_ui;
 mod input;
+mod links;
 mod output;
 mod output_smoke;
 mod panels;
 mod polish_smoke;
+mod preset_smoke;
 mod printing;
 mod properties;
 mod refinement_smoke;
 mod selection;
 mod selection_smoke;
+mod shared_service_smoke;
 mod smoke;
 mod text_menu;
 mod text_menu_smoke;
@@ -28,12 +39,14 @@ actions!(
     compose,
     [
         NewDocument,
+        NewWordDocument,
         OpenDocument,
         SaveDocument,
         SaveAs,
         ExportMenu,
         ExportCompose,
         ExportPng,
+        ExportWord,
         PrintDocument,
         GroupSelection,
         UngroupSelection,
@@ -65,7 +78,8 @@ fn main() {
                 Menu {
                     name: "File".into(),
                     items: vec![
-                        MenuItem::action("New", NewDocument),
+                        MenuItem::action("New document…", NewDocument),
+                        MenuItem::action("New Word-compatible document…", NewWordDocument),
                         MenuItem::action("Open…", OpenDocument),
                         MenuItem::separator(),
                         MenuItem::action("Save", SaveDocument),
@@ -73,6 +87,7 @@ fn main() {
                         MenuItem::separator(),
                         MenuItem::action("Export Compose file…", ExportCompose),
                         MenuItem::action("Export PNG…", ExportPng),
+                        MenuItem::action("Export Word (.docx)…", ExportWord),
                         MenuItem::action("Print…", PrintDocument),
                     ],
                 },

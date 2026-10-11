@@ -21,8 +21,8 @@ cat > "$compose_bundle/Contents/Info.plist" <<'PLIST'
 <key>CFBundleIdentifier</key><string>app.compose.editor</string>
 <key>CFBundleExecutable</key><string>compose</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.8.1</string>
-<key>CFBundleVersion</key><string>13</string>
+<key>CFBundleShortVersionString</key><string>0.13.1</string>
+<key>CFBundleVersion</key><string>19</string>
 <key>CFBundleIconFile</key><string>Compose.icns</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>LSMinimumSystemVersion</key><string>12.0</string>

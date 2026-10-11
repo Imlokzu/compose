@@ -175,6 +175,21 @@ mod format_validation_tests {
     use super::*;
     use document::{NodeKind, Rect};
     #[test]
+    fn word_mode_is_saved_and_old_json_defaults_to_compose() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("word.compose");
+        let doc = Document {
+            mode: document::DocumentMode::Word,
+            ..Default::default()
+        };
+        save(&path, &doc).unwrap();
+        assert_eq!(load(&path).unwrap(), doc);
+        let mut data = serde_json::to_value(Document::default()).unwrap();
+        data.as_object_mut().unwrap().remove("mode");
+        let legacy: Document = serde_json::from_value(data).unwrap();
+        assert_eq!(legacy.mode, document::DocumentMode::Compose);
+    }
+    #[test]
     fn mixed_text_roundtrip() {
         let mut doc = Document::default();
         let mut rich = text::RichText::new("Small BIG 👩‍💻\nSecond paragraph");

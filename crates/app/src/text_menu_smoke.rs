@@ -31,10 +31,13 @@ fn click(window: WindowHandle<Workspace>, cx: &mut AsyncApp, at: Point<Pixels>) 
         w.draw(cx).clear();
     })
 }
-fn toolbar_click(window: WindowHandle<Workspace>, cx: &mut AsyncApp, x: f32, y: f32) -> Result<()> {
-    let at = window.update(cx, |s, _, _| {
-        s.text_toolbar_bounds().unwrap().origin + point(px(x), px(y))
-    })?;
+fn toolbar_click(
+    window: WindowHandle<Workspace>,
+    cx: &mut AsyncApp,
+    id: &'static str,
+) -> Result<()> {
+    draw(window, cx)?;
+    let at = window.update(cx, |s, _, _| s.selection_control_bounds[id].center())?;
     click(window, cx, at)
 }
 fn menu_click(window: WindowHandle<Workspace>, cx: &mut AsyncApp, x: f32, y: f32) -> Result<()> {
@@ -66,7 +69,7 @@ pub fn font_weights(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Resul
     draw(window, cx)?;
     for i in [0, 3, 1, 2, 0, 3] {
         let weight = renderer::FONT_CHOICES[0].weights[i].0;
-        toolbar_click(window, cx, 210., 24.)?;
+        toolbar_click(window, cx, "float-weight")?;
         menu_click(window, cx, 80., 74. + 39. * i as f32)?;
         window.update(cx, |s, _, _| {
             let t = s.text().unwrap();
@@ -82,7 +85,7 @@ pub fn font_weights(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Resul
             );
             Ok::<_, anyhow::Error>(())
         })??;
-        toolbar_click(window, cx, 247., 60.)?;
+        toolbar_click(window, cx, "float-italic")?;
         window.update(cx, |s, _, _| {
             ensure!(
                 s.text().unwrap().style_at(4).italic && !s.text().unwrap().style_at(0).italic,
@@ -90,7 +93,7 @@ pub fn font_weights(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Resul
             );
             Ok::<_, anyhow::Error>(())
         })??;
-        toolbar_click(window, cx, 247., 60.)?;
+        toolbar_click(window, cx, "float-italic")?;
     }
     window.update(cx, |s, _, cx| {
         let dir =
@@ -204,17 +207,19 @@ pub fn run(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Result<()> {
             selection.width,
             selection.height,
         ));
-        let expected = ((f32::from(r.left() + r.right()) / 2.) - 192.).clamp(
-            f32::from(s.viewport.left()) + 8.,
-            f32::from(s.viewport.right()) - 392.,
-        );
+        let expected = ((f32::from(r.left() + r.right()) / 2.)
+            - crate::text_menu::TEXT_TOOLBAR_WIDTH / 2.)
+            .clamp(
+                f32::from(s.viewport.left()) + 8.,
+                f32::from(s.viewport.right()) - crate::text_menu::TEXT_TOOLBAR_WIDTH - 8.,
+            );
         ensure!(
             (f32::from(b.left()) - expected).abs() < 0.5,
             "Toolbar did not center on the selected text"
         );
         Ok::<_, anyhow::Error>(())
     })??;
-    toolbar_click(window, cx, 55., 24.)?;
+    toolbar_click(window, cx, "float-font")?;
     window.update(cx, |s, _, _| {
         ensure!(
             s.popup == Some(Popup::Fonts) && s.text_popup_anchor.is_some(),
@@ -256,7 +261,7 @@ pub fn run(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Result<()> {
         );
         Ok::<_, anyhow::Error>(())
     })??;
-    toolbar_click(window, cx, 210., 24.)?;
+    toolbar_click(window, cx, "float-weight")?;
     menu_click(window, cx, 70., 113.)?;
     window.update(cx, |s, _, _| {
         ensure!(
@@ -267,7 +272,7 @@ pub fn run(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Result<()> {
         );
         Ok::<_, anyhow::Error>(())
     })??;
-    toolbar_click(window, cx, 363., 24.)?;
+    toolbar_click(window, cx, "float-sizes")?;
     menu_click(window, cx, 60., 190.)?;
     window.update(cx, |s, _, _| {
         ensure!(
@@ -278,7 +283,7 @@ pub fn run(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Result<()> {
         );
         Ok::<_, anyhow::Error>(())
     })??;
-    toolbar_click(window, cx, 60., 60.)?;
+    toolbar_click(window, cx, "float-styles")?;
     key(window, cx, "right")?;
     AnyWindowHandle::from(window).update(cx, |_, w, cx| {
         w.dispatch_keystroke(
@@ -318,7 +323,7 @@ pub fn run(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Result<()> {
         );
         Ok::<_, anyhow::Error>(())
     })??;
-    toolbar_click(window, cx, 318., 60.)?;
+    toolbar_click(window, cx, "float-color")?;
     let color_at = window.update(cx, |s, _, _| {
         ensure!(
             s.popup == Some(Popup::Colors) && s.text_popup_anchor.is_some(),
@@ -343,7 +348,7 @@ pub fn run(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Result<()> {
         Ok::<_, anyhow::Error>(())
     })??;
     // Rejected field input must keep focus so correction cannot delete the passage.
-    toolbar_click(window, cx, 300., 24.)?;
+    toolbar_click(window, cx, "float-size-field")?;
     AnyWindowHandle::from(window).update(cx, |_, w, cx| {
         w.dispatch_keystroke(
             Keystroke {
@@ -377,7 +382,7 @@ pub fn run(window: WindowHandle<Workspace>, cx: &mut AsyncApp) -> Result<()> {
         Ok::<_, anyhow::Error>(())
     })??;
     key(window, cx, "escape")?;
-    toolbar_click(window, cx, 358., 60.)?;
+    toolbar_click(window, cx, "float-reset")?;
     window.update(cx, |s, _, cx| {
         ensure!(
             s.range() == (13..16)
