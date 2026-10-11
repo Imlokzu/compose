@@ -82,6 +82,7 @@ pub fn native(window: gpui::WindowHandle<crate::workspace::Workspace>, cx: &mut 
             if std::env::args().any(|a| a == "--output") {
                 crate::output_smoke::run(window, cx).await?;
             }
+            if std::env::args().any(|a|a=="--shapes") {crate::shapes_smoke::run(window,cx)?;}
             if std::env::args().any(|a| a == "--selection") {
                 crate::selection_smoke::run(window, cx).await?;
             }

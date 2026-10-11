@@ -13,6 +13,7 @@ pub struct LayerDrag {
 }
 #[derive(Clone, Copy)]
 pub enum InsertKind {
+    Shape(document::ShapeKind),
     Tool(Tool),
     Component(editor::Component),
     Image,
@@ -45,6 +46,7 @@ impl Render for DragLabel {
 impl InsertKind {
     fn name(self) -> &'static str {
         match self {
+            Self::Shape(kind) => kind.label(),
             Self::Tool(Tool::Text) => "Text",
             Self::Tool(Tool::Shape) => "Shape",
             Self::Tool(Tool::Frame) => "Frame",
@@ -64,7 +66,9 @@ impl Workspace {
         if self.word_mode()
             && matches!(
                 kind,
-                InsertKind::Tool(Tool::Shape | Tool::Frame) | InsertKind::Component(_)
+                InsertKind::Shape(_)
+                    | InsertKind::Tool(Tool::Shape | Tool::Frame)
+                    | InsertKind::Component(_)
             )
         {
             return button;
@@ -75,9 +79,13 @@ impl Workspace {
             epoch: self.drag_epoch,
         };
         button.on_drag(payload, move |value, position, _, cx| {
-            entity.update(cx, |s, _| {
+            entity.update(cx, |s, cx| {
                 s.end_edit();
                 s.gesture = Gesture::None;
+                if matches!(value.kind, InsertKind::Shape(_)) {
+                    s.close_popup();
+                    cx.notify();
+                }
             });
             cx.new(|_| DragLabel {
                 name: value.kind.name().into(),
@@ -104,6 +112,10 @@ impl Workspace {
         self.end_edit();
         self.gesture = Gesture::None;
         match payload.kind {
+            InsertKind::Shape(kind) if !self.word_mode() => {
+                self.shape_kind = kind;
+                self.insert_at(Tool::Shape, p);
+            }
             InsertKind::Tool(tool) => self.insert_at(tool, p),
             InsertKind::Component(c) if !self.word_mode() => {
                 self.editor.insert_component(c, p.x, p.y);

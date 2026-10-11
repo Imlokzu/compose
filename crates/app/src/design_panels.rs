@@ -147,29 +147,33 @@ impl Workspace {
             return div();
         };
         let a = &n.appearance;
+        let line =
+            matches!(n.kind, document::NodeKind::Shape) && n.shape == document::ShapeKind::Line;
         self.section(
-            "Stroke & shadow",
+            if line { "Shadow" } else { "Stroke & shadow" },
             div()
                 .flex()
                 .flex_col()
                 .gap(px(9.))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(label("Stroke"))
-                        .child(self.button(
-                            "toggle-stroke",
-                            if a.stroke_width > 0. { "On" } else { "Off" },
-                            Some("stroke"),
-                            a.stroke_width > 0.,
-                            false,
-                            cx,
-                            |s, _, _| s.toggle_stroke(),
-                        )),
-                )
-                .when(a.stroke_width > 0., |d| {
+                .when(!line, |d| {
+                    d.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(label("Stroke"))
+                            .child(self.button(
+                                "toggle-stroke",
+                                if a.stroke_width > 0. { "On" } else { "Off" },
+                                Some("stroke"),
+                                a.stroke_width > 0.,
+                                false,
+                                cx,
+                                |s, _, _| s.toggle_stroke(),
+                            )),
+                    )
+                })
+                .when(a.stroke_width > 0. && !line, |d| {
                     d.child(self.color_row(ColorTarget::Stroke, cx))
                         .child(self.field_view(
                             Field::StrokeWidth,
@@ -403,6 +407,18 @@ impl Workspace {
             .border_color(rgb(LINE))
             .shadow_lg();
         match popup {
+            Popup::Shapes => {
+                body = body
+                    .child(self.popup_header(
+                        if self.shape_change_target.is_some() {
+                            "Shape type"
+                        } else {
+                            "Shapes"
+                        },
+                        cx,
+                    ))
+                    .child(self.shape_menu(cx));
+            }
             Popup::Link => {
                 body = body
                     .child(self.popup_header("Text link", cx))
@@ -665,7 +681,25 @@ impl Workspace {
                     }),
                 ),
         );
-        if let Some(anchor) = self.text_popup_anchor {
+        if popup == Popup::Shapes {
+            let anchor = self
+                .selection_control_bounds
+                .get(if self.shape_change_target.is_some() {
+                    "shape-type"
+                } else {
+                    "tool-shape"
+                });
+            let position = anchor
+                .map(|b| point(b.left(), b.bottom() + px(6.)))
+                .unwrap_or(point(px(236.), px(60.)));
+            root.child(
+                anchored()
+                    .position(position)
+                    .snap_to_window_with_margin(Edges::all(px(12.)))
+                    .child(div().id("popup-body").occlude().child(body)),
+            )
+            .into_any_element()
+        } else if let Some(anchor) = self.text_popup_anchor {
             let entity = cx.entity();
             let position = point(
                 anchor.left() + (anchor.size.width - px(304.)) / 2.,

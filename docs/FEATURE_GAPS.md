@@ -38,7 +38,7 @@ Implementation: `crates/editor/src/clipboard.rs`, `crates/app/src/clipboard.rs`,
 | 4 | Image crop and external image paste | `ImageSizing` offers Scale/Stretch; clipboard consumes text or local object tokens | Crop coordinates must preserve originals; OS-image decoding must run off the UI thread. |
 | 5 | Selection/group scaling and batch style controls | `Workspace::resizable_selection` exposes handles only for individual non-group nodes; `selection_inspector` is about organization | Define text-size versus reflow behavior, proportions, child transforms and opacity semantics before adding handles/fields. Grouping across different parents also remains unavailable. |
 | 6 | Vector PDF and additional export formats | `export::PageRenderer` generates raster pages; native Print uses 300 DPI PNGs | Vector glyph/font embedding and DOCX/HTML fidelity need their own output backends and visual tests. |
-| 7 | Linked components, rotation and vector shapes | Component insertion produces independent layouts; no rotation/vector geometry model | Follow everyday writing, recovery and layout features. |
+| 7 | Linked components, rotation and freeform vector paths | Component insertion produces independent layouts; ten editable figures exist, but arbitrary path/rotation editing does not | Follow everyday writing, recovery and layout features. |
 
 Platform validation remains a release gate: macOS is locally exercised; Windows,
 Linux, accessibility and system-font portability have not been certified.

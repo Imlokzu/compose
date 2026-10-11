@@ -1,6 +1,6 @@
 //! Page output in document coordinates. No window, selection or camera state.
 use anyhow::{Context, Result, ensure};
-use document::{Color, Document, Node, NodeKind, Rect};
+use document::{Color, Document, Node, NodeKind, PathCommand, Rect, ShapeKind};
 use parley::PositionedLayoutItem;
 use renderer::TextEngine;
 use std::{collections::HashMap, io::Write, path::Path};
@@ -94,11 +94,23 @@ impl PageRenderer {
             if opacity <= 0. {
                 continue;
             }
-            let path = rounded_rect(r, node.radius);
+            let path = node_path(node, r, node.radius);
             if node.appearance.shadow && !matches!(node.kind, NodeKind::Text(_)) {
                 shadow(canvas, r, node, scale, opacity)?;
             }
             match &node.kind {
+                NodeKind::Shape if node.shape == ShapeKind::Line => {
+                    canvas.stroke_path(
+                        &path,
+                        &paint(node.fill, opacity),
+                        &tiny_skia::Stroke {
+                            width: node.appearance.stroke_width.max(0.5),
+                            ..Default::default()
+                        },
+                        Transform::from_scale(scale, scale),
+                        None,
+                    );
+                }
                 NodeKind::Shape | NodeKind::Frame => {
                     canvas.fill_path(
                         &path,
@@ -245,17 +257,26 @@ impl PageRenderer {
                     }
                 }
             }
-            if node.appearance.stroke_width > 0. && !matches!(node.kind, NodeKind::Text(_)) {
-                let mask = clip(canvas, r, node.radius, scale)?;
+            if node.appearance.stroke_width > 0.
+                && !matches!(node.kind, NodeKind::Text(_))
+                && !(matches!(node.kind, NodeKind::Shape) && node.shape == ShapeKind::Line)
+            {
+                let custom =
+                    matches!(node.kind, NodeKind::Shape) && node.shape != ShapeKind::Rectangle;
+                let mask = if custom {
+                    None
+                } else {
+                    Some(clip(canvas, r, node.radius, scale)?)
+                };
                 canvas.stroke_path(
                     &path,
                     &paint(node.appearance.stroke, opacity),
                     &tiny_skia::Stroke {
-                        width: node.appearance.stroke_width * 2.,
+                        width: node.appearance.stroke_width * if custom { 1. } else { 2. },
                         ..Default::default()
                     },
                     Transform::from_scale(scale, scale),
-                    Some(&mask),
+                    mask.as_ref(),
                 );
             }
             self.nodes(doc, &node.children, r.x, r.y, opacity, scale, canvas)?;
@@ -340,9 +361,30 @@ fn rounded_rect(r: Rect, radius: f32) -> tiny_skia::Path {
     }
     p.finish().expect("Validated rectangle")
 }
+fn node_path(node: &Node, r: Rect, radius: f32) -> tiny_skia::Path {
+    if !matches!(node.kind, NodeKind::Shape) || node.shape == ShapeKind::Rectangle {
+        return rounded_rect(r, radius);
+    }
+    let mut path = PathBuilder::new();
+    for command in node.shape.path(r, radius, node.line_flipped) {
+        match command {
+            PathCommand::Move(p) => path.move_to(p.x, p.y),
+            PathCommand::Line(p) => path.line_to(p.x, p.y),
+            PathCommand::Quad(c, p) => path.quad_to(c.x, c.y, p.x, p.y),
+            PathCommand::Cubic(a, b, p) => path.cubic_to(a.x, a.y, b.x, b.y, p.x, p.y),
+            PathCommand::Close => path.close(),
+        }
+    }
+    path.finish().expect("Validated shape geometry")
+}
 fn shadow(canvas: &mut Pixmap, r: Rect, node: &Node, scale: f32, opacity: f32) -> Result<()> {
     let sigma = node.appearance.shadow_blur * scale / 2.;
-    let pad = (sigma * 3.).ceil() + 2.;
+    let line_pad = if matches!(node.kind, NodeKind::Shape) && node.shape == ShapeKind::Line {
+        node.appearance.stroke_width.max(0.5) * scale / 2.
+    } else {
+        0.
+    };
+    let pad = (sigma * 3.).ceil() + 2. + line_pad;
     let x = (r.x * scale - pad)
         .floor()
         .max(0.)
@@ -370,12 +412,23 @@ fn shadow(canvas: &mut Pixmap, r: Rect, node: &Node, scale: f32, opacity: f32) -
         r.height * scale,
     );
     let mut mask = Mask::new(w, h).context("Could not allocate shadow")?;
-    mask.fill_path(
-        &rounded_rect(local, node.radius * scale),
-        FillRule::Winding,
-        true,
-        Transform::identity(),
-    );
+    let path = node_path(node, local, node.radius * scale);
+    if matches!(node.kind, NodeKind::Shape) && node.shape == ShapeKind::Line {
+        let mut line = Pixmap::new(w, h).context("Could not allocate line shadow")?;
+        line.stroke_path(
+            &path,
+            &paint(Color::rgb(255, 255, 255), 1.),
+            &tiny_skia::Stroke {
+                width: node.appearance.stroke_width.max(0.5) * scale,
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+        mask = Mask::from_pixmap(line.as_ref(), tiny_skia::MaskType::Alpha);
+    } else {
+        mask.fill_path(&path, FillRule::Winding, true, Transform::identity());
+    }
     let alpha = image::GrayImage::from_raw(w, h, mask.data().to_vec()).context("Invalid shadow")?;
     let alpha = if sigma > 0. {
         image::imageops::blur(&alpha, sigma)

@@ -42,6 +42,10 @@ Linux/Windows support still needs platform-specific builds and interaction QA.
 
 ## Working features
 
+- Shape picker with Rectangle, Circle, Oval, Triangle, Diamond, Pentagon,
+  Hexagon, Star, Arrow and Line. Draw or drag figures onto the page, or change a
+  selected shape's type in the inspector. Circles stay proportionate; polygons
+  support rounded corners, colors, borders and shadows.
 - Two document modes: Word-compatible text/image layouts with editable DOCX
   export, and the full Compose canvas with shapes, frames, groups and effects.
 
@@ -105,7 +109,11 @@ image bytes and are undoable.
 small round handle inside a selected image or shape to adjust its corners.
 The eight square handles resize the element; the cursor indicates their direction.
 
-Use V/T/R/F for select/text/rectangle/frame. Shift constrains other objects;
+Use V/T/R/F for select/text/rectangle/frame. Hold Shift to constrain proportions.
+O selects the Oval tool. Click **Shapes** in Insert or the toolbar for all figures.
+Pick one and click/drag on the page, or drag it directly from the picker.
+Select a figure and use **Shape** in the inspector to change its type while
+keeping its styling. Circle dimensions stay equal; Line has a thickness field.
 Alt resizes about the center or bypasses move snapping. Space+drag or the wheel
 pans. Cmd/Ctrl+wheel zooms; clicking the zoom percentage fits the page.
 On macOS, pinch the touchpad to zoom; two-finger scrolling pans. Pinch and
@@ -130,6 +138,7 @@ cargo run -p compose -- --smoke-test
 cargo run -p compose -- --ui-smoke
 cargo run -p compose -- --ui-smoke --refinements
 cargo run -p compose -- --ui-smoke --polish
+cargo run -p compose -- --ui-smoke --shapes --compact
 ```
 
 The native smoke test sends events inside Compose; it doesn't move the real

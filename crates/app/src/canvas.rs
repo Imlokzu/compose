@@ -116,7 +116,11 @@ impl Workspace {
             }
             let b = self.screen_rect(r);
             window.paint_quad(outline(b, rgb(0x2878ed), BorderStyle::Solid));
-            if !self.editing && !self.selection_locked() && self.resizable_selection() {
+            if !self.editing
+                && !self.selection_locked()
+                && !matches!(self.tool, Tool::Shape | Tool::Frame)
+                && self.resizable_selection()
+            {
                 for (x, y) in Self::handle_points(r) {
                     let p = self.screen_rect(Rect::new(x, y, 0., 0.)).origin;
                     window.paint_quad(
@@ -143,17 +147,42 @@ impl Workspace {
                     .border_color(rgb(0x2878ed)),
             );
         }
-        if let Gesture::Create { start, current, .. } = self.gesture {
-            let r = self.drawn_box(start, current);
-            window.paint_quad(
-                fill(self.screen_rect(r), rgba(0x2878ed0a))
-                    .border_widths(px(1.))
-                    .border_color(rgb(0x2878ed)),
-            );
+        if let Gesture::Create {
+            start,
+            current,
+            tool,
+            square,
+        } = self.gesture
+        {
+            let r = self.drawn_figure_box(start, current, tool, square);
+            if tool == Tool::Shape {
+                let bounds = self.screen_rect(r);
+                let path = self.shape_kind.path(
+                    Rect::new(
+                        f32::from(bounds.origin.x),
+                        f32::from(bounds.origin.y),
+                        f32::from(bounds.size.width),
+                        f32::from(bounds.size.height),
+                    ),
+                    0.,
+                    (current.x - start.x) * (current.y - start.y) < 0.,
+                );
+                if self.shape_kind != document::ShapeKind::Line {
+                    crate::shapes::paint_path(window, &path, rgba(0x2878ed15).into(), None);
+                }
+                crate::shapes::paint_path(window, &path, rgb(0x2878ed).into(), Some(1.5));
+            } else {
+                window.paint_quad(
+                    fill(self.screen_rect(r), rgba(0x2878ed0a))
+                        .border_widths(px(1.))
+                        .border_color(rgb(0x2878ed)),
+                );
+            }
         }
         if !self.preview
             && !self.editing
             && !self.selection_locked()
+            && !matches!(self.tool, Tool::Shape | Tool::Frame)
             && self.resizable_selection()
             && let Some(id) = self.editor.selected()
             && let Some(r) = self.absolute_frame(id)
@@ -208,7 +237,11 @@ impl Workspace {
             let b = self.screen_rect(r);
             let opacity = opacity * n.opacity;
             let corners = px(n.radius.min(r.width.min(r.height) / 2.) * self.zoom);
-            if n.appearance.shadow && !matches!(n.kind, NodeKind::Text(_)) {
+            let custom_shape =
+                matches!(n.kind, NodeKind::Shape) && n.shape != document::ShapeKind::Rectangle;
+            if n.appearance.shadow && custom_shape {
+                self.paint_shape_shadow(n, r, opacity, window);
+            } else if n.appearance.shadow && !matches!(n.kind, NodeKind::Text(_)) {
                 window.paint_shadows(
                     b,
                     corners.into(),
@@ -221,6 +254,7 @@ impl Workspace {
                 );
             }
             match &n.kind {
+                NodeKind::Shape if custom_shape => self.paint_custom_shape(n, r, opacity, window),
                 NodeKind::Shape | NodeKind::Frame => {
                     let mut color = crate::panels::color(n.fill);
                     color.a *= opacity;
@@ -308,7 +342,10 @@ impl Workspace {
                     }
                 }
             }
-            if n.appearance.stroke_width > 0. && !matches!(n.kind, NodeKind::Text(_)) {
+            if n.appearance.stroke_width > 0.
+                && !matches!(n.kind, NodeKind::Text(_))
+                && !custom_shape
+            {
                 let mut stroke = crate::panels::color(n.appearance.stroke);
                 stroke.a *= opacity;
                 window.paint_quad(
@@ -376,6 +413,7 @@ impl Workspace {
         if !self.preview
             && !self.editing
             && !self.selection_locked()
+            && !matches!(self.tool, Tool::Shape | Tool::Frame)
             && self.resizable_selection()
             && let Some(id) = self.editor.selected()
             && let Some(r) = self.absolute_frame(id)
@@ -452,6 +490,7 @@ impl Workspace {
                 start: p,
                 current: p,
                 tool: self.tool,
+                square: event.modifiers.shift,
             };
             cx.notify();
             return;
@@ -566,6 +605,7 @@ impl Workspace {
                 start,
                 current: p,
                 tool,
+                square: event.modifiers.shift,
             },
             Gesture::Pan { start, pan } => {
                 self.pan = DocPoint {
@@ -655,8 +695,8 @@ impl Workspace {
                         self.editor.checkpoint();
                         started = true
                     }
-                    let ratio = if self.image_scales() {
-                        self.image_ratio()
+                    let ratio = if let Some(ratio) = self.object_ratio() {
+                        Some(ratio)
                     } else if event.modifiers.shift {
                         Some(frame.width / frame.height)
                     } else {
@@ -733,7 +773,14 @@ impl Workspace {
         {
             let current = self.to_doc(event.position);
             if (current.x - start.x).abs() + (current.y - start.y).abs() > 4. / self.zoom {
-                self.insert_box(tool, self.drawn_box(start, current));
+                self.insert_box(
+                    tool,
+                    self.drawn_figure_box(start, current, tool, event.modifiers.shift),
+                );
+                if tool == Tool::Shape && self.shape_kind == document::ShapeKind::Line {
+                    self.editor.selected_node_mut().unwrap().line_flipped =
+                        (current.x - start.x) * (current.y - start.y) < 0.;
+                }
             } else {
                 self.insert_at(tool, start);
             }
@@ -780,6 +827,54 @@ impl Workspace {
         let bottom = start.y.max(current.y).clamp(y + min_h, page.height);
         Rect::new(x, y, right - x, bottom - y)
     }
+    pub fn drawn_figure_box(
+        &self,
+        start: DocPoint,
+        current: DocPoint,
+        tool: Tool,
+        square: bool,
+    ) -> Rect {
+        if tool != Tool::Shape {
+            return self.drawn_box(start, current);
+        }
+        let page = &self.editor.document.pages[self.editor.page];
+        if self.shape_kind == document::ShapeKind::Line {
+            let x = start.x.min(current.x).clamp(0., page.width - 1.);
+            let y = start.y.min(current.y).clamp(0., page.height - 1.);
+            return Rect::new(
+                x,
+                y,
+                (start.x - current.x).abs().max(1.).min(page.width - x),
+                (start.y - current.y).abs().max(1.).min(page.height - y),
+            );
+        }
+        if square || self.shape_kind == document::ShapeKind::Circle {
+            let start = DocPoint {
+                x: start.x.clamp(0., page.width - 1.),
+                y: start.y.clamp(0., page.height - 1.),
+            };
+            let dx = current.x - start.x;
+            let dy = current.y - start.y;
+            let max_x = if dx < 0. {
+                start.x
+            } else {
+                page.width - start.x
+            };
+            let max_y = if dy < 0. {
+                start.y
+            } else {
+                page.height - start.y
+            };
+            let side = dx.abs().max(dy.abs()).min(max_x).min(max_y).max(1.);
+            return Rect::new(
+                (if dx < 0. { start.x - side } else { start.x }).clamp(0., page.width - side),
+                (if dy < 0. { start.y - side } else { start.y }).clamp(0., page.height - side),
+                side,
+                side,
+            );
+        }
+        self.drawn_box(start, current)
+    }
     pub fn text_border_contains(&self, r: Rect, p: DocPoint) -> bool {
         let tolerance = 5. / self.zoom;
         let outer = Rect::new(
@@ -802,10 +897,7 @@ impl Workspace {
             return None;
         }
         let n = self.editor.selected_node()?;
-        if n.is_group
-            || matches!(n.kind, NodeKind::Text(_))
-            || r.width.min(r.height) * self.zoom < 48.
-        {
+        if n.is_group || !self.supports_radius() || r.width.min(r.height) * self.zoom < 48. {
             return None;
         }
         let inset = (14. / self.zoom + n.radius.min(r.width.min(r.height) / 2.) * 0.5)
@@ -861,6 +953,7 @@ impl Workspace {
             return CursorStyle::OpenHand;
         }
         if !self.editing
+            && !matches!(self.tool, Tool::Shape | Tool::Frame)
             && self.resizable_selection()
             && let Some(pointer) = self.last_pointer
             && let Some(id) = self.editor.selected()

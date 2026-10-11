@@ -15,6 +15,16 @@ impl AssetSource for Assets {
             "select" => include_bytes!("../../../assets/icons/select.svg"),
             "text" => include_bytes!("../../../assets/icons/text.svg"),
             "shape" => include_bytes!("../../../assets/icons/shape.svg"),
+            "circle" => include_bytes!("../../../assets/icons/circle.svg"),
+            "oval" => include_bytes!("../../../assets/icons/oval.svg"),
+            "triangle" => include_bytes!("../../../assets/icons/triangle.svg"),
+            "diamond" => include_bytes!("../../../assets/icons/diamond.svg"),
+            "pentagon" => include_bytes!("../../../assets/icons/pentagon.svg"),
+            "hexagon" => include_bytes!("../../../assets/icons/hexagon.svg"),
+            "star" => include_bytes!("../../../assets/icons/star.svg"),
+            "arrow" => include_bytes!("../../../assets/icons/arrow.svg"),
+            "line" => include_bytes!("../../../assets/icons/line.svg"),
+
             "frame" => include_bytes!("../../../assets/icons/frame.svg"),
             "image" => include_bytes!("../../../assets/icons/image.svg"),
             "undo" => include_bytes!("../../../assets/icons/undo.svg"),
@@ -122,7 +132,7 @@ impl Workspace {
             "close-popover" => "Close",
             "tool-select" => "Select · V",
             "tool-text" => "Text & selection · T",
-            "tool-shape" => "Rectangle · R",
+            "tool-shape" => "Shapes · R for rectangle, O for oval",
             "tool-frame" => "Frame · F",
             "tool-image" => "Insert image",
             "undo" => "Undo · ⌘Z",
@@ -363,13 +373,12 @@ impl Workspace {
             .child(self.button(
                 "tool-shape",
                 "",
-                Some("shape"),
+                Some(self.shape_kind.icon()),
                 self.tool == Tool::Shape,
                 self.word_mode(),
                 cx,
                 |s, _, _| {
-                    s.end_edit();
-                    s.tool = Tool::Shape;
+                    s.open_shapes(false);
                 },
             ))
             .child(self.button(
@@ -522,7 +531,7 @@ impl Workspace {
                     match &n.kind {
                         NodeKind::Text(_) => "text",
                         NodeKind::Image { .. } => "image",
-                        NodeKind::Shape => "shape",
+                        NodeKind::Shape => n.shape.icon(),
                         NodeKind::Frame => "frame",
                     }
                 };
@@ -949,17 +958,12 @@ impl Workspace {
                                 self.draggable_insert(
                                     self.button(
                                         "insert-shape",
-                                        "Shape",
+                                        "Shapes",
                                         Some("shape"),
                                         false,
                                         self.word_mode(),
                                         cx,
-                                        |s, _, _| {
-                                            s.insert_at(
-                                                Tool::Shape,
-                                                document::Point { x: 64., y: 120. },
-                                            )
-                                        },
+                                        |s, _, _| s.open_shapes(false),
                                     ),
                                     crate::drag_drop::InsertKind::Tool(Tool::Shape),
                                     cx,
@@ -1137,11 +1141,14 @@ impl Workspace {
             match node.kind {
                 NodeKind::Text(_) => "Text",
                 NodeKind::Image { .. } => "Image",
-                NodeKind::Shape => "Rectangle",
+                NodeKind::Shape => node.shape.label(),
                 NodeKind::Frame => "Frame",
             },
             self.field_view(Field::Name, "", node.name.clone(), cx),
         ));
+        if matches!(node.kind, NodeKind::Shape) {
+            panel = panel.child(self.section("Shape", self.shape_properties(cx)));
+        }
         if let NodeKind::Text(t) = &node.kind {
             panel = panel.child(self.section(
                 "Text link",
@@ -1391,7 +1398,7 @@ impl Workspace {
                     ),
             ),
         );
-        if !is_text {
+        if self.supports_radius() {
             let max = r.width.min(r.height) / 2.;
             let radius = node.radius.min(max);
             panel = panel.child(

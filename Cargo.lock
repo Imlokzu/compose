@@ -985,7 +985,7 @@ dependencies = [
 
 [[package]]
 name = "compose"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "cocoa 0.26.0",
@@ -1010,7 +1010,7 @@ dependencies = [
 
 [[package]]
 name = "compose-background-service"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1528,9 +1528,10 @@ dependencies = [
 
 [[package]]
 name = "document"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "serde",
+ "serde_json",
  "text",
 ]
 
@@ -1612,7 +1613,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "editor"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "document",
  "file_format",
@@ -1782,7 +1783,7 @@ dependencies = [
 
 [[package]]
 name = "export"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "document",
@@ -1849,7 +1850,7 @@ dependencies = [
 
 [[package]]
 name = "file_format"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "document",
@@ -3039,7 +3040,7 @@ dependencies = [
 
 [[package]]
 name = "image_search"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "reqwest",
@@ -3050,7 +3051,7 @@ dependencies = [
 
 [[package]]
 name = "image_tools"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "image",
@@ -3236,7 +3237,7 @@ dependencies = [
 
 [[package]]
 name = "layout"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "document",
 ]
@@ -4827,7 +4828,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "renderer"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "document",
@@ -5980,7 +5981,7 @@ dependencies = [
 
 [[package]]
 name = "text"
-version = "0.13.1"
+version = "0.14.0"
 dependencies = [
  "serde",
  "serde_json",

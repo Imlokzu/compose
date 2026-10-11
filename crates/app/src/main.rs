@@ -25,6 +25,8 @@ mod properties;
 mod refinement_smoke;
 mod selection;
 mod selection_smoke;
+mod shapes;
+mod shapes_smoke;
 mod shared_service_smoke;
 mod smoke;
 mod text_menu;

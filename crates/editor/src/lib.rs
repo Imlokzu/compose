@@ -254,7 +254,18 @@ impl Editor {
                 if let Some(id) = hit(&n.children, local, deep, include_locked) {
                     return Some(id);
                 }
-                if n.frame.contains(p) {
+                let inside = if matches!(n.kind, NodeKind::Shape) {
+                    n.shape.contains(
+                        n.frame,
+                        n.radius,
+                        n.line_flipped,
+                        n.appearance.stroke_width,
+                        p,
+                    )
+                } else {
+                    n.frame.contains(p)
+                };
+                if inside {
                     return Some(n.id);
                 }
             }

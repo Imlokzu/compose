@@ -457,6 +457,8 @@ impl Editor {
                     a: 0,
                 },
                 radius: 0.,
+                shape: document::ShapeKind::Rectangle,
+                line_flipped: false,
                 appearance: Appearance::default(),
                 image_sizing: ImageSizing::Scale,
                 image_source: None,

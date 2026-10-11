@@ -65,6 +65,7 @@ pub enum Gesture {
         start: DocPoint,
         current: DocPoint,
         tool: Tool,
+        square: bool,
     },
     Move {
         start: DocPoint,
@@ -97,6 +98,7 @@ pub enum Gesture {
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Popup {
+    Shapes,
     Link,
     Background,
     Context,
@@ -158,6 +160,8 @@ pub struct Workspace {
     pub images: HashMap<String, Arc<RenderImage>>,
     pub focus: FocusHandle,
     pub tool: Tool,
+    pub shape_kind: document::ShapeKind,
+    pub shape_change_target: Option<NodeId>,
     pub editing: bool,
     pub anchor: usize,
     pub caret: usize,
@@ -269,6 +273,8 @@ impl Workspace {
             images: HashMap::new(),
             focus,
             tool: Tool::Select,
+            shape_kind: document::ShapeKind::Rectangle,
+            shape_change_target: None,
             editing: false,
             anchor: 0,
             caret: 0,
@@ -395,6 +401,7 @@ impl Workspace {
         let (w, h): (f32, f32) = match tool {
             Tool::Text => (300., 28.),
             Tool::Frame => (280., 180.),
+            Tool::Shape => self.shape_kind.default_size(),
             _ => (160., 120.),
         };
         let x = p.x.clamp(0., (page.width - 16.).max(0.));
@@ -404,7 +411,7 @@ impl Workspace {
             Rect::new(x, y, w.min(page.width - x), h.min(page.height - y)),
         );
     }
-    pub fn insert_box(&mut self, tool: Tool, rect: Rect) {
+    pub fn insert_box(&mut self, tool: Tool, mut rect: Rect) {
         if self.word_mode() && tool != Tool::Text {
             self.set_status("Shapes and frames are available in Compose mode", true);
             return;
@@ -416,7 +423,21 @@ impl Workspace {
             Tool::Frame => NodeKind::Frame,
             _ => NodeKind::Shape,
         };
+        if tool == Tool::Shape && self.shape_kind == document::ShapeKind::Circle {
+            let side = rect.width.min(rect.height);
+            rect.width = side;
+            rect.height = side;
+        }
         self.editor.insert(kind, rect);
+        if tool == Tool::Shape {
+            let node = self.editor.selected_node_mut().unwrap();
+            node.shape = self.shape_kind;
+            node.name = self.shape_kind.label().into();
+            if self.shape_kind == document::ShapeKind::Line {
+                node.appearance.stroke_width = 2.;
+                node.fill = document::Color::rgb(35, 38, 36);
+            }
+        }
         if self.word_mode() {
             self.measure();
         }
@@ -644,11 +665,7 @@ impl Workspace {
             self.set_radius(v);
             return;
         }
-        let ratio = if self.image_scales() {
-            self.image_ratio()
-        } else {
-            None
-        };
+        let ratio = self.object_ratio();
         let paired = match (edit.field, ratio) {
             (Field::W, Some(r)) => Some(v / r),
             (Field::H, Some(r)) => Some(v * r),

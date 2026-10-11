@@ -2,6 +2,24 @@
 
 Write like a document. Design like a canvas.
 
+## Editable figures
+
+`document::ShapeKind` and `PathCommand` define native figure geometry without
+UI dependencies. Shape nodes retain the existing `NodeKind::Shape` representation
+and add a defaulted subtype and line direction. Legacy files decode as rectangles.
+The native canvas converts the shared path commands into GPUI paths; PNG/print
+uses the same geometry with tiny-skia. Hit-testing uses the visible figure rather
+than its whole bounding rectangle, with a small selection tolerance for lines.
+Rectangle quads remain the fast path; other closed figures use vector fills and
+centered strokes. Polygon radius rounds each corner. Native polygon shadows use
+bounded layered paths; exported shadows use the existing raster Gaussian blur.
+
+Circle creation, numeric edits and every resize handle constrain its ratio to 1;
+validation rejects a stretched circle. Line direction is captured from the draw
+gesture, and thickness is independent of its endpoint rectangle. The compact
+picker shares toolbar/inspector choices, drag payloads, lock guards and snapshot
+history. Shapes remain Compose-only; Word mode retains its existing restriction.
+
 ## Clipboard and image replacement
 
 `editor::ObjectClipboard` holds detached subtrees and only their referenced assets.

@@ -3,6 +3,23 @@ use document::{ImageSizing, NodeKind, Rect};
 use text::TextStyle;
 
 impl Workspace {
+    pub fn object_ratio(&self) -> Option<f32> {
+        if self.editor.selected_node().is_some_and(|n| {
+            matches!(n.kind, NodeKind::Shape) && n.shape == document::ShapeKind::Circle
+        }) {
+            Some(1.)
+        } else if self.image_scales() {
+            self.image_ratio()
+        } else {
+            None
+        }
+    }
+    pub fn supports_radius(&self) -> bool {
+        self.editor.selected_node().is_some_and(|n| {
+            !matches!(n.kind, NodeKind::Text(_))
+                && (!matches!(n.kind, NodeKind::Shape) || n.shape.supports_radius())
+        })
+    }
     pub fn image_dimensions(&self) -> Option<(f32, f32)> {
         let NodeKind::Image { asset } = &self.editor.selected_node()?.kind else {
             return None;
@@ -95,7 +112,7 @@ impl Workspace {
         let Some(n) = self.editor.selected_node() else {
             return;
         };
-        if matches!(n.kind, NodeKind::Text(_)) {
+        if !self.supports_radius() {
             return;
         }
         let radius = radius.clamp(0., n.frame.width.min(n.frame.height) / 2.);

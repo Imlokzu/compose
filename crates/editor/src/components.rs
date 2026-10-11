@@ -54,6 +54,8 @@ impl Builder {
             opacity: 1.,
             fill: color,
             radius: 0.,
+            shape: document::ShapeKind::Rectangle,
+            line_flipped: false,
             appearance: Appearance::default(),
             image_sizing: ImageSizing::Scale,
             image_source: None,

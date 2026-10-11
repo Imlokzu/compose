@@ -16,6 +16,7 @@ impl Workspace {
         self.popup = None;
         self.text_popup_anchor = None;
         self.picker = None;
+        self.shape_change_target = None;
     }
     pub fn toggle_popup(&mut self, popup: Popup) {
         self.commit_field();
@@ -334,7 +335,15 @@ impl Workspace {
                 self.editor.checkpoint();
                 if let Some(n) = self.editor.selected_node_mut() {
                     match edit.field {
-                        Field::StrokeWidth => n.appearance.stroke_width = v,
+                        Field::StrokeWidth => {
+                            n.appearance.stroke_width = if matches!(n.kind, NodeKind::Shape)
+                                && n.shape == document::ShapeKind::Line
+                            {
+                                v.max(0.5)
+                            } else {
+                                v
+                            }
+                        }
                         Field::ShadowBlur => n.appearance.shadow_blur = v,
                         _ => n.appearance.shadow_y = v,
                     }

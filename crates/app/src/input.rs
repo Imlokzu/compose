@@ -421,7 +421,14 @@ impl Workspace {
                 }
                 "v" => self.tool = Tool::Select,
                 "t" => self.tool = Tool::Text,
-                "r" if !self.word_mode() => self.tool = Tool::Shape,
+                "r" if !self.word_mode() => {
+                    self.shape_kind = document::ShapeKind::Rectangle;
+                    self.tool = Tool::Shape;
+                }
+                "o" if !self.word_mode() => {
+                    self.shape_kind = document::ShapeKind::Ellipse;
+                    self.tool = Tool::Shape;
+                }
                 "f" if !self.word_mode() => self.tool = Tool::Frame,
                 "enter" => {
                     if self.text().is_some() {

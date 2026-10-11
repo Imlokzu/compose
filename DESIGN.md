@@ -45,6 +45,23 @@ Rust + GPUI; Parley owns document text layout. Coordinates in points, zoom only 
 - Cross-platform packaging and accessibility need platform-specific validation beyond this macOS environment.
 - Rotation, pagination across linked text frames and additional export formats are later milestones.
 
+## Shape library (0.14)
+- Reuse the compact native popover and toolbar controls. Shapes opens a two-column
+  picker with labeled line icons: Rectangle, Circle, Oval, Triangle, Diamond,
+  Pentagon, Hexagon, Star, Arrow and Line. Choosing a type arms click/drag creation.
+  The same picker changes an existing shape from its inspector in one undo step.
+- Circle keeps equal dimensions through creation, handles and numeric fields.
+  Oval resizes independently; Shift constrains other figures while drawing.
+  Line is a real two-endpoint stroke, with thickness and color controls.
+- Preserve fill, opacity, rounded polygon corners, outlines, shadows, layers,
+  dragging, duplicates and history. Show corner controls only for figures that
+  actually support rounding. Word mode retains its canvas-shape restriction.
+- Native rendering, PNG/print and hit-testing share document-owned geometry.
+  Select the visible shape, allowing clicks through empty oval/polygon corners.
+  Older shape nodes without a subtype reopen as rectangles.
+- Validate native picker gestures, both line directions, circle proportions,
+  exact save/reopen and exports, including styled curved and concave figures.
+
 ## Refinement: image sizing and partial text
 - Scale is the default for images. Both side and corner handles preserve source proportions; dimension fields update the paired value. Bigger/Smaller uniformly scale around the center. Original image bytes are retained.
 - Stretch is an explicit alternative with independent width and height. Mode is stored in the document and undoable. Returning to Scale restores the source ratio.

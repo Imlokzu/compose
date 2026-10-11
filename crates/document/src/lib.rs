@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 pub mod presets;
+mod shapes;
+pub use shapes::{PathCommand, ShapeKind};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::Arc,
@@ -106,6 +108,10 @@ pub struct Node {
     pub opacity: f32,
     pub fill: Color,
     pub radius: f32,
+    #[serde(default)]
+    pub shape: ShapeKind,
+    #[serde(default)]
+    pub line_flipped: bool,
     #[serde(default)]
     pub appearance: Appearance,
     #[serde(default)]
@@ -278,6 +284,8 @@ impl Document {
             opacity: 1.,
             fill: Color::rgb(211, 222, 201),
             radius: 0.,
+            shape: ShapeKind::Rectangle,
+            line_flipped: false,
             appearance: Appearance::default(),
             image_sizing: ImageSizing::Scale,
             image_source: None,
@@ -326,6 +334,12 @@ impl Document {
                 }
                 if *count > 100_000 {
                     return Err("Too many objects".into());
+                }
+                if matches!(n.kind, NodeKind::Shape)
+                    && n.shape == ShapeKind::Circle
+                    && (n.frame.width - n.frame.height).abs() > 0.001
+                {
+                    return Err("A circle must have equal width and height".into());
                 }
                 if !ids.insert(n.id)
                     || !n.frame.valid()
