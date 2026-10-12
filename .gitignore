@@ -4,6 +4,11 @@
 /dist
 /.omx
 /cores
+/android/.gradle
+/android/.kotlin
+/android/**/build
+/android/local.properties
+/android/app/src/main/jniLibs
 
 # Generated QA output and local orchestration notes.
 /artifacts

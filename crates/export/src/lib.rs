@@ -49,6 +49,30 @@ impl Default for PageRenderer {
     }
 }
 impl PageRenderer {
+    /// Transparent text preview for native frontends, using the same Parley glyphs as export.
+    pub fn render_text(
+        &mut self,
+        kind: &NodeKind,
+        width: f32,
+        height: f32,
+        dpi: u32,
+    ) -> Result<Pixmap> {
+        ensure!(matches!(kind, NodeKind::Text(_)), "Expected a text layer");
+        let (w, h) = dimensions(width, height, dpi)?;
+        let mut canvas = Pixmap::new(w, h).context("Could not allocate text preview")?;
+        let mut doc = Document::default();
+        doc.insert(0, kind.clone(), Rect::new(0., 0., width, height));
+        self.nodes(
+            &doc,
+            &doc.pages[0].nodes,
+            0.,
+            0.,
+            1.,
+            dpi as f32 / 72.,
+            &mut canvas,
+        )?;
+        Ok(canvas)
+    }
     pub fn render(&mut self, doc: &Document, page: usize, dpi: u32) -> Result<Pixmap> {
         doc.validate().map_err(anyhow::Error::msg)?;
         ensure!(

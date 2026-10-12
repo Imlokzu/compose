@@ -1,12 +1,18 @@
 //! Parley lays out in document points. GPUI paints the resulting glyph positions.
 use document::Rect;
+#[cfg(feature = "gpui")]
 use gpui::{App, Pixels, Point, Window, point, px};
+#[cfg(feature = "gpui")]
+use parley::PositionedLayoutItem;
 use parley::{
-    Affinity, Alignment, AlignmentOptions, Cursor, FontContext, Layout, LayoutContext,
-    PositionedLayoutItem, Selection, StyleProperty,
+    Affinity, Alignment, AlignmentOptions, Cursor, FontContext, Layout, LayoutContext, Selection,
+    StyleProperty,
 };
+#[cfg(feature = "gpui")]
 use skrifa::{FontRef, MetadataProvider, string::StringId};
-use std::{borrow::Cow, ops::Range, sync::Arc};
+#[cfg(feature = "gpui")]
+use std::borrow::Cow;
+use std::{ops::Range, sync::Arc};
 use text::{Color, RichText, TextAlign, TextStyle};
 mod fonts;
 use fonts::FONTS;
@@ -28,17 +34,63 @@ impl TextEngine {
                 .collection
                 .register_fonts(parley::fontique::Blob::new(Arc::new(bytes.to_vec())), None);
         }
+        #[cfg(target_os = "android")]
+        {
+            use parley::fontique::{Blob, GenericFamily, Script};
+            static SYSTEM_FONTS: std::sync::OnceLock<Vec<(&'static str, Arc<Vec<u8>>)>> =
+                std::sync::OnceLock::new();
+            let sources = SYSTEM_FONTS.get_or_init(|| {
+                let mut sources = vec![(
+                    "emoji",
+                    Arc::new(include_bytes!("../../../assets/fonts/NotoColorEmoji.ttf").to_vec()),
+                )];
+                sources.extend(
+                    [
+                        ("Arab", "/system/fonts/NotoNaskhArabic-Regular.ttf"),
+                        ("Hani", "/system/fonts/NotoSansCJK-Regular.ttc"),
+                        ("Deva", "/system/fonts/NotoSansDevanagari-VF.ttf"),
+                    ]
+                    .into_iter()
+                    .filter_map(|(script, path)| {
+                        std::fs::read(path)
+                            .ok()
+                            .map(|bytes| (script, Arc::new(bytes)))
+                    })
+                    .collect::<Vec<_>>(),
+                );
+                sources
+            });
+            for (script, bytes) in sources {
+                let families = fonts
+                    .collection
+                    .register_fonts(Blob::new(bytes.clone()), None)
+                    .into_iter()
+                    .map(|(family, _)| family)
+                    .collect::<Vec<_>>();
+                if *script == "emoji" {
+                    fonts
+                        .collection
+                        .append_generic_families(GenericFamily::Emoji, families.into_iter());
+                } else if let Ok(tag) = <[u8; 4]>::try_from(script.as_bytes()) {
+                    fonts
+                        .collection
+                        .append_fallbacks(Script::from_bytes(tag), families.into_iter());
+                }
+            }
+        }
         Self {
             fonts,
             context: LayoutContext::new(),
         }
     }
+    #[cfg(feature = "gpui")]
     pub fn register_gpui_fonts(&self, cx: &mut App) -> anyhow::Result<()> {
         cx.text_system()
             .add_fonts(FONTS.iter().map(|b| Cow::Borrowed(*b)).collect())
     }
     /// Native regression check: the painter must resolve the exact static faces
     /// used by Parley, never a silent fallback with unrelated glyph indices.
+    #[cfg(feature = "gpui")]
     pub fn verify_native_faces(&mut self, window: &mut Window) -> anyhow::Result<usize> {
         use anyhow::ensure;
         let probe = "HAMBURGEVONS0123456789";
@@ -128,8 +180,15 @@ impl TextEngine {
             .context
             .ranged_builder(&mut self.fonts, &text.content, 1.0, false);
         fn properties(s: &TextStyle) -> Vec<StyleProperty<'_, Color>> {
+            #[cfg(target_os = "android")]
+            let family = parley::FontFamily::Source(std::borrow::Cow::Owned(format!(
+                "\"{}\", emoji",
+                s.family
+            )));
+            #[cfg(not(target_os = "android"))]
+            let family = s.family.as_str().into();
             vec![
-                StyleProperty::FontFamily(s.family.as_str().into()),
+                StyleProperty::FontFamily(family),
                 StyleProperty::FontSize(s.size),
                 StyleProperty::FontWeight(parley::FontWeight::new(s.weight)),
                 StyleProperty::FontStyle(if s.italic {
@@ -186,6 +245,7 @@ fn rect(r: parley::BoundingBox) -> Rect {
         r.height() as f32,
     )
 }
+#[cfg(feature = "gpui")]
 fn paint_font(face: &FontRef<'_>, weight: f32, italic: bool) -> gpui::Font {
     // Extended weights may have a legacy family such as "Lato Light" while
     // CoreText/fontique register the typographic family "Lato". Resolving the
@@ -269,6 +329,7 @@ impl TextLayout {
     pub fn word_at(&self, x: f32, y: f32) -> Range<usize> {
         Selection::word_from_point(&self.layout, x, y).text_range()
     }
+    #[cfg(feature = "gpui")]
     pub fn paint(
         &self,
         origin: Point<Pixels>,
@@ -375,6 +436,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "gpui")]
 mod bundled_font_tests {
     use super::*;
     #[test]

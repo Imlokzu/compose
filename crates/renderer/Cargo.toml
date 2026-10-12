@@ -6,7 +6,11 @@ edition.workspace = true
 [dependencies]
 text.workspace = true
 document.workspace = true
-gpui.workspace = true
+gpui = { workspace = true, optional = true }
 parley.workspace = true
 anyhow.workspace = true
 skrifa = "0.44"
+
+[features]
+default = ["gpui"]
+gpui = ["dep:gpui"]

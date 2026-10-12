@@ -11,6 +11,24 @@ Calm, precise, native. Two offset pages as the mark. Avoid ribbons, dashboard ca
 ## Product goals
 Write like a document. Design like a canvas. Real editing, placement and local save/reopen. Word-compatible documents export editable DOCX. Exclude cloud, accounts, AI, presentations and DOCX import. Success means a user can create and reopen a designed page with text and an image.
 
+## Android editor (0.15)
+- Keep the shared Rust document/history/Parley/export engines. Kotlin/Jetpack
+  Compose supplies Android controls, keyboard, file/photo pickers and touch input.
+- Phones use a focused canvas, compact top bar and 48dp bottom controls for Text,
+  Shapes, Image, Layers and Properties. Panels are bounded native bottom sheets.
+  Tablets show Layers beside the canvas. Preserve warm neutrals and blue selection.
+- Native text editing uses Android selection, keyboard/IME and clipboard. Its
+  formatting controls edit highlighted UTF-16 ranges through the Rust rich-text
+  model. Document previews and PNG exports use the shared Parley glyph renderer.
+- Pinch zoom stays under the fingers; two fingers pan. Selected objects drag and
+  resize with generous touch handles. Movement is one history step per gesture.
+- Start screen offers the real editable presets and both document modes. Local
+  recovery protects work across background/process recreation. Save/open use
+  Android's document picker; .compose files exchange with the desktop app.
+- Validate phone/tablet, keyboard, Unicode range formatting, drag/resize, images,
+  history, file roundtrip, export and lifecycle on emulators. Keep unavailable
+  desktop-only features out of mobile controls and report platform limits honestly.
+
 ## Personas and jobs
 Students and people making homework, reports, worksheets, posters and covers on desktop.
 

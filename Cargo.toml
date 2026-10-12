@@ -25,8 +25,8 @@ document = { path = "crates/document" }
 layout = { path = "crates/layout" }
 editor = { path = "crates/editor" }
 file_format = { path = "crates/file_format" }
-renderer = { path = "crates/renderer" }
-export = { path = "crates/export" }
+renderer = { path = "crates/renderer", default-features = false }
+export = { path = "crates/export", default-features = false }
 
 [patch.crates-io]
 gpui = { path = "vendor/gpui" }

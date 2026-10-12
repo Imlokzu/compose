@@ -9,7 +9,7 @@ document.workspace = true
 text.workspace = true
 editor.workspace = true
 layout.workspace = true
-renderer.workspace = true
+renderer = { workspace = true, features = ["gpui"] }
 file_format.workspace = true
 export.workspace = true
 image.workspace = true

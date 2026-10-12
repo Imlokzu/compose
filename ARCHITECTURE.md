@@ -2,6 +2,22 @@
 
 Write like a document. Design like a canvas.
 
+## Android boundary
+
+`crates/android_bridge` owns a session around the existing `Editor`, Parley
+layout and raster/Word exporters. `android/` contains only the native Android UI,
+keyboard, touch camera, image previews and platform file/photo pickers. Commands
+are serialized off the UI thread and rejected edits retain the working document.
+JNI session handles are identifiers in a synchronized registry, not exposed pointers.
+Rich text selection crosses the boundary as UTF-16 and is mapped to byte ranges
+by the shared text engine. Font/shape/file/export logic is not rewritten in Kotlin.
+
+GPUI is an optional renderer feature. The desktop app enables it explicitly;
+Android links Parley/Swash/tiny-skia without GPUI. Transparent text previews use
+the same glyphs as export, while Android's EditText supplies actual IME selection
+and clipboard behavior. Android owns its local recovery file and storage-access
+framework URIs. Original assets remain in the native `.compose` container.
+
 ## Editable figures
 
 `document::ShapeKind` and `PathCommand` define native figure geometry without

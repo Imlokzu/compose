@@ -19,6 +19,11 @@ DOCX import is not implemented yet.
 
 ## Run
 
+An initial native Android version is available too. Build an APK with
+`./scripts/package-android.sh`; see [Android instructions](android/README.md)
+for supported devices, mobile features and emulator checks. It shares the Rust
+document engine and `.compose` files with desktop.
+
 Install Rust (currently validated with 1.98.1). On macOS, install the Xcode
 Command Line Tools with `xcode-select --install`; the build uses Swift only for
 the small native printing adapter.

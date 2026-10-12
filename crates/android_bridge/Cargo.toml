@@ -1,0 +1,27 @@
+[package]
+name = "compose-android-bridge"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow.workspace = true
+document.workspace = true
+editor.workspace = true
+text.workspace = true
+layout.workspace = true
+file_format.workspace = true
+renderer.workspace = true
+export.workspace = true
+image.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+image_tools = { path = "../image_tools" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "=0.21.1"
+
+[dev-dependencies]
+tempfile.workspace = true
