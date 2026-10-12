@@ -1,7 +1,7 @@
 //! Android transport only. The shared Rust engine owns editable documents and history.
 use anyhow::{Context, Result, bail, ensure};
 use document::{Document, DocumentMode, Node, NodeKind, PathCommand, Point, Rect, ShapeKind};
-use editor::Editor;
+use editor::{Component, Editor};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, path::Path, sync::Arc};
@@ -12,6 +12,7 @@ pub struct Session {
     output: export::PageRenderer,
     saved: Document,
     bitmaps: HashMap<u64, (Node, Vec<u8>)>,
+    previews: HashMap<String, Vec<u8>>,
 }
 impl Default for Session {
     fn default() -> Self {
@@ -27,9 +28,14 @@ impl Session {
             text: renderer::TextEngine::new(),
             output: export::PageRenderer::default(),
             bitmaps: HashMap::new(),
+            previews: HashMap::new(),
         }
     }
     fn measure(&mut self) {
+        Self::measure_document(&mut self.editor.document, &mut self.text);
+        self.editor.normalize_groups();
+    }
+    fn measure_document(document: &mut Document, engine: &mut renderer::TextEngine) {
         fn texts(nodes: &mut [Node], engine: &mut renderer::TextEngine, word: bool) {
             for n in nodes {
                 if let NodeKind::Text(t) = &n.kind {
@@ -46,8 +52,8 @@ impl Session {
                 texts(&mut n.children, engine, word);
             }
         }
-        let word = self.editor.document.mode == DocumentMode::Word;
-        for page in &mut self.editor.document.pages {
+        let word = document.mode == DocumentMode::Word;
+        for page in &mut document.pages {
             if word {
                 let mut y = document::WORD_MARGIN;
                 for n in &mut page.nodes {
@@ -56,35 +62,36 @@ impl Session {
                     if matches!(n.kind, NodeKind::Text(_)) {
                         n.frame.width = page.width - 2. * document::WORD_MARGIN;
                     }
-                    texts(std::slice::from_mut(n), &mut self.text, true);
+                    texts(std::slice::from_mut(n), engine, true);
                     if n.visible {
                         y += n.frame.height + document::WORD_BLOCK_GAP;
                     }
                 }
             } else {
-                texts(&mut page.nodes, &mut self.text, false);
+                texts(&mut page.nodes, engine, false);
             }
         }
-        self.editor.normalize_groups();
     }
     pub fn snapshot(&mut self) -> Value {
         self.measure();
         let mut scene = Vec::new();
         fn collect(
             nodes: &[Node],
-            x: f32,
-            y: f32,
+            origin: Point,
             opacity: f32,
             depth: usize,
             locked: bool,
+            visible: bool,
             scene: &mut Vec<Value>,
         ) {
             for n in nodes {
-                if !n.visible {
-                    continue;
-                }
-                let r = Rect::new(x + n.frame.x, y + n.frame.y, n.frame.width, n.frame.height);
-                let mut item = json!({"node":n,"bounds":r,"opacity":opacity*n.opacity,"depth":depth,"locked":locked||n.locked});
+                let r = Rect::new(
+                    origin.x + n.frame.x,
+                    origin.y + n.frame.y,
+                    n.frame.width,
+                    n.frame.height,
+                );
+                let mut item = json!({"node":n,"bounds":r,"opacity":opacity*n.opacity,"depth":depth,"locked":locked||n.locked,"visible":visible&&n.visible});
                 if matches!(n.kind, NodeKind::Shape) {
                     item["path"] = json!(
                         n.shape
@@ -104,23 +111,47 @@ impl Session {
                 scene.push(item);
                 collect(
                     &n.children,
-                    r.x,
-                    r.y,
+                    Point { x: r.x, y: r.y },
                     opacity * n.opacity,
                     depth + 1,
                     locked || n.locked,
+                    visible && n.visible,
                     scene,
                 );
             }
         }
         let page = &self.editor.document.pages[self.editor.page];
-        collect(&page.nodes, 0., 0., 1., 0, false, &mut scene);
+        collect(
+            &page.nodes,
+            Point { x: 0., y: 0. },
+            1.,
+            0,
+            false,
+            true,
+            &mut scene,
+        );
         json!({"ok":true,"document":self.editor.document,"scene":scene,"page":self.editor.page,
             "selected":self.editor.selected(),"undo":self.editor.can_undo(),"redo":self.editor.can_redo(),
             "dirty":self.editor.document!=self.saved})
     }
     pub fn asset(&mut self, key: &str) -> Result<Vec<u8>> {
-        if let Some(id) = key.strip_prefix("text:") {
+        if let Some(name) = key.strip_prefix("preset:") {
+            if let Some(bytes) = self.previews.get(key) {
+                return Ok(bytes.clone());
+            }
+            let (mode, name) = name.split_once(':').context("Missing preset mode")?;
+            let mut doc = preset(name)
+                .create(if mode == "Word" {
+                    DocumentMode::Word
+                } else {
+                    DocumentMode::Compose
+                })
+                .map_err(anyhow::Error::msg)?;
+            Self::measure_document(&mut doc, &mut self.text);
+            let bytes = self.output.render(&doc, 0, 72)?.encode_png()?;
+            self.previews.insert(key.into(), bytes.clone());
+            Ok(bytes)
+        } else if let Some(id) = key.strip_prefix("text:") {
             let id = id.parse::<u64>()?;
             let node = self
                 .editor
@@ -169,16 +200,7 @@ impl Session {
         match op {
             "state" => {}
             "new" => {
-                let preset = match arg["preset"].as_str().unwrap_or("Blank") {
-                    "Resume" => document::presets::Preset::Resume,
-                    "PhotoResume" => document::presets::Preset::PhotoResume,
-                    "PhotoCover" => document::presets::Preset::PhotoCover,
-                    "Portfolio" => document::presets::Preset::Portfolio,
-                    "Report" => document::presets::Preset::Report,
-                    "Letter" => document::presets::Preset::Letter,
-                    "Poster" => document::presets::Preset::Poster,
-                    _ => document::presets::Preset::Blank,
-                };
+                let preset = preset(arg["preset"].as_str().unwrap_or("Blank"));
                 let mode = if arg["mode"] == "Word" {
                     DocumentMode::Word
                 } else {
@@ -230,6 +252,89 @@ impl Session {
             "order" => self
                 .editor
                 .reorder_selected(arg["forward"].as_bool().unwrap_or(true)),
+            "visibility" | "lock" => {
+                let id = arg["id"].as_u64().context("Select a layer")?;
+                ensure!(self.editor.document.node(id).is_some(), "Layer unavailable");
+                if op == "lock" {
+                    self.editor.toggle_lock(id);
+                } else {
+                    self.editor.toggle_visibility(id);
+                }
+            }
+            "component" => {
+                ensure!(
+                    self.editor.document.mode == DocumentMode::Compose,
+                    "Components need Compose mode"
+                );
+                let component = match arg["kind"].as_str().context("Choose a component")? {
+                    "Title" => Component::Title,
+                    "Callout" => Component::Callout,
+                    "Quote" => Component::Quote,
+                    "Stat" => Component::Stat,
+                    "Card" => Component::Card,
+                    "Divider" => Component::Divider,
+                    _ => bail!("Unknown component"),
+                };
+                let id = self.editor.insert_component(component, 56., 100.);
+                self.editor.select_only(Some(id));
+            }
+            "image_sizing" => {
+                self.guard()?;
+                ensure!(
+                    self.editor.document.mode == DocumentMode::Compose,
+                    "Canvas sizing needs Compose mode"
+                );
+                let NodeKind::Image { asset } = &self.editor.selected_node().unwrap().kind else {
+                    bail!("Select an image")
+                };
+                let sizing: document::ImageSizing = serde_json::from_value(arg["mode"].clone())?;
+                let (_, w, h) = image_tools::validate_input(&self.editor.document.assets[asset])?;
+                self.editor.checkpoint();
+                let n = self.editor.selected_node_mut().unwrap();
+                n.image_sizing = sizing;
+                if sizing == document::ImageSizing::Scale {
+                    n.frame.height = n.frame.width * h as f32 / w as f32;
+                }
+            }
+            "scale" => {
+                self.guard()?;
+                ensure!(
+                    self.editor.document.mode == DocumentMode::Compose,
+                    "Canvas sizing needs Compose mode"
+                );
+                let factor = num(arg, "factor")?;
+                ensure!((0.25..=4.).contains(&factor), "Invalid scale");
+                let id = self.editor.selected().unwrap();
+                let mut r = self.editor.selection_bounds().context("Select a layer")?;
+                r.x -= r.width * (factor - 1.) / 2.;
+                r.y -= r.height * (factor - 1.) / 2.;
+                r.width *= factor;
+                r.height *= factor;
+                ensure!(r.valid(), "Invalid size");
+                self.editor.checkpoint();
+                self.editor.apply_frames(&[(id, r)]);
+            }
+            "align_page" => {
+                self.guard()?;
+                ensure!(
+                    self.editor.document.mode == DocumentMode::Compose,
+                    "Word blocks follow reading order"
+                );
+                let id = self.editor.selected().unwrap();
+                let mut r = self.editor.selection_bounds().context("Select a layer")?;
+                let page = &self.editor.document.pages[self.editor.page];
+                match arg["alignment"].as_str() {
+                    Some("left") => r.x = 0.,
+                    Some("center_x") => r.x = (page.width - r.width) / 2.,
+                    Some("right") => r.x = page.width - r.width,
+                    Some("top") => r.y = 0.,
+                    Some("center_y") => r.y = (page.height - r.height) / 2.,
+                    Some("bottom") => r.y = page.height - r.height,
+                    _ => bail!("Unknown alignment"),
+                }
+                self.editor.checkpoint();
+                self.editor.apply_frames(&[(id, r)]);
+            }
             "insert" => {
                 let ty = arg["kind"].as_str().unwrap_or("Text");
                 let word = self.editor.document.mode == DocumentMode::Word;
@@ -278,12 +383,20 @@ impl Session {
                 ensure!(r.valid(), "Invalid size");
                 let n = self.editor.selected_node().unwrap();
                 if matches!(n.kind, NodeKind::Shape) && n.shape == ShapeKind::Circle {
-                    r.height = r.width;
+                    if arg["axis"] == "height" {
+                        r.width = r.height;
+                    } else {
+                        r.height = r.width;
+                    }
                 }
                 if matches!(n.kind, NodeKind::Image { .. })
                     && n.image_sizing == document::ImageSizing::Scale
                 {
-                    r.height = r.width / n.frame.width * n.frame.height;
+                    if arg["axis"] == "height" {
+                        r.width = r.height / n.frame.height * n.frame.width;
+                    } else {
+                        r.height = r.width / n.frame.width * n.frame.height;
+                    }
                 }
                 self.editor.checkpoint();
                 self.editor.apply_frames(&[(id, r)]);
@@ -332,43 +445,70 @@ impl Session {
                         .unwrap_or(t.content.encode_utf16().count() as u64)
                         as usize,
                 );
-                let mut style = t.style_at(start);
-                if arg["bold_toggle"] == true {
-                    style.weight = if style.weight >= 600. { 400. } else { 700. };
+                if let Some(alignment) = arg["alignment"].as_str() {
+                    t.align = serde_json::from_value(json!(alignment))?;
                 }
-                if arg["italic_toggle"] == true {
-                    style.italic = !style.italic;
-                }
-                if arg["underline_toggle"] == true {
-                    style.underline = !style.underline;
-                }
-                if let Some(v) = arg["size"].as_f64() {
-                    style.size = v as f32;
-                }
-                if let Some(v) = arg["family"].as_str() {
-                    style.family = v.into();
-                }
-                if let Some(v) = arg["weight"].as_f64() {
-                    style.weight = v as f32;
-                }
-                if let Some(v) = arg["italic"].as_bool() {
-                    style.italic = v;
-                }
-                if let Some(v) = arg["underline"].as_bool() {
-                    style.underline = v;
-                }
-                if arg["color"].is_object() {
-                    style.color = serde_json::from_value(arg["color"].clone())?;
-                }
-                if let Some(v) = arg["link"].as_str() {
-                    style.link = if v.is_empty() { None } else { Some(v.into()) };
-                }
-                renderer::normalize_style(&mut style);
-                ensure!(style.valid(), "Invalid text style");
+                let initial = t.style_at(start.min(end));
+                let patch = |mut style: text::TextStyle| -> Result<text::TextStyle> {
+                    if arg["bold_toggle"] == true {
+                        style.weight = if initial.weight >= 600. { 400. } else { 700. };
+                    }
+                    if arg["italic_toggle"] == true {
+                        style.italic = !initial.italic;
+                    }
+                    if arg["underline_toggle"] == true {
+                        style.underline = !initial.underline;
+                    }
+                    if let Some(v) = arg["size"].as_f64() {
+                        style.size = v as f32;
+                    }
+                    if let Some(v) = arg["family"].as_str() {
+                        style.family = v.into();
+                    }
+                    if let Some(v) = arg["weight"].as_f64() {
+                        style.weight = v as f32;
+                    }
+                    if let Some(v) = arg["italic"].as_bool() {
+                        style.italic = v;
+                    }
+                    if let Some(v) = arg["underline"].as_bool() {
+                        style.underline = v;
+                    }
+                    if arg["color"].is_object() {
+                        style.color = serde_json::from_value(arg["color"].clone())?;
+                    }
+                    if let Some(v) = arg["link"].as_str() {
+                        style.link = if v.is_empty() {
+                            None
+                        } else {
+                            Some(text::links::normalize(v).map_err(anyhow::Error::msg)?)
+                        };
+                    }
+                    renderer::normalize_style(&mut style);
+                    ensure!(style.valid(), "Invalid text style");
+                    Ok(style)
+                };
                 if start == end {
-                    t.style = style;
+                    t.style = patch(t.style.clone())?;
                 } else {
-                    t.apply_style(start.min(end)..start.max(end), style);
+                    // Patch each existing run, retaining unrelated fonts, links and emphasis.
+                    let mut boundaries = vec![start.min(end), start.max(end)];
+                    for span in &t.spans {
+                        for b in [span.range.start, span.range.end] {
+                            if b > start.min(end) && b < start.max(end) {
+                                boundaries.push(b);
+                            }
+                        }
+                    }
+                    boundaries.sort_unstable();
+                    boundaries.dedup();
+                    let runs = boundaries
+                        .windows(2)
+                        .map(|b| Ok((b[0]..b[1], patch(t.style_at(b[0]))?)))
+                        .collect::<Result<Vec<_>>>()?;
+                    for (range, style) in runs {
+                        t.apply_style(range, style);
+                    }
                 }
             }
             "style" => {
@@ -492,6 +632,19 @@ impl Session {
         ensure!(self.editor.selected_node().is_some(), "Select one layer");
         ensure!(!self.editor.selection_locked(), "This layer is locked");
         Ok(())
+    }
+}
+fn preset(name: &str) -> document::presets::Preset {
+    use document::presets::Preset;
+    match name {
+        "Resume" => Preset::Resume,
+        "PhotoResume" => Preset::PhotoResume,
+        "PhotoCover" => Preset::PhotoCover,
+        "Portfolio" => Preset::Portfolio,
+        "Report" => Preset::Report,
+        "Letter" => Preset::Letter,
+        "Poster" => Preset::Poster,
+        _ => Preset::Blank,
     }
 }
 fn num(value: &Value, key: &str) -> Result<f32> {

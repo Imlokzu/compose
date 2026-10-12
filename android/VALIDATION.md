@@ -1,5 +1,37 @@
 # Android milestone validation · 2026-10-12
 
+## Desktop visual alignment · 0.16.0
+
+- Canonical desktop SVG icons converted reproducibly to Android vectors; native
+  icon toolbar, labeled tools, type icons, active states and sectioned inspector.
+  Phone gallery uses two columns, tablet uses four; previews render the actual
+  editable Rust presets without changing the active document or selection.
+- Six offline device scenarios cover the original milestone plus selected-range
+  Light/Bold/Black, real font previews, color and normalized links; image numeric
+  sizing, Scale/Stretch, uniform scaling, corners, hide/show, lock/unlock and
+  insertion/undo of editable nested components. Layer trees preserve sibling
+  ordering and expand/collapse. Phone and tablet screenshots were inspected.
+- Six bridge tests pass, including previews leaving active content untouched,
+  hidden parent propagation, locks, proportions, original assets, Word restrictions
+  and color changes retaining mixed typography/links. Targeted strict Clippy passes.
+- Numeric commits dismiss the keyboard; sheets fully expand so controls remain
+  reachable. Tablet canvas width stays stable while opening an inspector sheet.
+- APK is optimized with R8 and locally development-signed. Android 8+/ARM64
+  remains the target; physical-device performance and older Android runtimes
+  remain unverified. This milestone does not claim all desktop features.
+- Delivered artifact: `dist/Compose-Android.apk`, 0.16.0 / code 2, 30.75 MiB;
+  APK signature verified. SHA-256:
+  `da8da277588618bba3864850598bd42b5b20a3c2db76f3f8d648f447f7936297`.
+- Optimized build launched, opened a photo preset and used the icon Save control
+  with Android's actual document picker. Its saved `.compose` file validated through
+  the desktop engine; force-stop/relaunch retained the local draft.
+
+Current evidence: `artifacts/android-polish-{engine,clippy,phone-tests,tablet-tests,
+package}.log` and `artifacts/android-polish/{phone,tablet}/` screenshots. The
+live cutout service was tested in 0.15 below; it was not re-exercised for this polish.
+
+The following records describe the earlier 0.15 foundation verification.
+
 The initial mobile APK is native Kotlin/Jetpack Compose + the shared Rust engine.
 It is a foundation release with real editing, not full desktop feature parity.
 

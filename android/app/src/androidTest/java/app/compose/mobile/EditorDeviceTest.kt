@@ -11,6 +11,7 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
+import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.UiController
 import android.view.View
@@ -23,7 +24,7 @@ import java.io.File
 class EditorDeviceTest {
     @get:Rule val rule=createAndroidComposeRule<MainActivity>()
     private val model get()=rule.activity.editorModel
-    private fun waitFor(test:()->Boolean){rule.waitUntil(20000,test)}
+    private fun waitFor(test:()->Boolean){try{rule.waitUntil(20000,test)}catch(e:Exception){android.util.Log.e("ComposeQA","${model.message}; sheet=${model.sheet}; selected=${model.state?.selected?.node}");shot("timeout");throw e}}
     private fun act(op:String,vararg fields:Pair<String,Any?>){runBlocking {withContext(Dispatchers.Main){Assert.assertTrue(model.execute(command(op,*fields)))}};rule.waitForIdle()}
     private fun shot(name:String) {
         rule.waitForIdle()
@@ -40,7 +41,7 @@ class EditorDeviceTest {
         rule.onNodeWithTag("Text input").assertExists()
         onView(withId(7007)).perform(replaceText(text))
         waitFor{model.state?.selected?.text?.optString("content")==text}
-        onView(withId(7007)).perform(object:ViewAction {
+        onView(withId(7007)).inRoot(isDialog()).perform(object:ViewAction {
             override fun getConstraints():Matcher<View> = isAssignableFrom(EditText::class.java)
             override fun getDescription()="Select only café using Android text selection"
             override fun perform(ui:UiController,view:View){(view as EditText).setSelection(9,13);ui.loopMainThreadUntilIdle()}
@@ -65,7 +66,7 @@ class EditorDeviceTest {
         rule.onNodeWithTag("Preset PhotoResume").performScrollTo().performClick();waitFor{!model.home&&model.state?.layers?.any{it.image!=null}==true}
         Assert.assertTrue(model.images.values.any{it.width>500})
         rule.onNodeWithTag("Pages").assertIsDisplayed()
-        if(rule.activity.resources.configuration.screenWidthDp>=720)rule.onNodeWithTag("Layer ${model.state!!.layers.first().id}").assertIsDisplayed()
+        if(rule.activity.resources.configuration.screenWidthDp>=720){val tag="Layer ${model.state!!.layers.first().id}";rule.onNodeWithTag("Layer list").performScrollToNode(hasTestTag(tag));rule.onNodeWithTag(tag).assertIsDisplayed()}
         shot("photo-resume")
         rule.onNodeWithTag("Shapes").performClick();rule.onNodeWithTag("Figure Circle").performClick()
         waitFor{model.sheet==null&&model.state?.selected?.shape=="Circle"}
@@ -119,6 +120,67 @@ class EditorDeviceTest {
         rule.waitForIdle();Assert.assertEquals(before,model.state!!.document.toString());Assert.assertEquals(old.id,model.state?.selectedId)
         rule.onNodeWithTag("Undo").performClick();waitFor{model.state!!.selected!!.width==moved.width}
         shot("touch-canvas")
+    }
+    private fun selectText(start:Int,end:Int) {
+        onView(withId(7007)).inRoot(isDialog()).perform(object:ViewAction {
+            override fun getConstraints():Matcher<View> = isAssignableFrom(EditText::class.java)
+            override fun getDescription()="Select passage $start to $end"
+            override fun perform(ui:UiController,view:View){(view as EditText).setSelection(start,end);ui.loopMainThreadUntilIdle()}
+        })
+    }
+    @Test fun desktopTextToolsKeepRangeThroughFontsWeightsColorsAndLinks() {
+        waitFor{model.previews.size>=8};shot("preset-gallery")
+        rule.onNodeWithTag("Preset Blank").performClick();waitFor{!model.home}
+        rule.onNodeWithTag("Text").performClick();waitFor{model.sheet=="Text"}
+        onView(withId(7007)).perform(replaceText("Light and Black"));waitFor{model.state?.selected?.text?.optString("content")=="Light and Black"}
+        selectText(0,5)
+        rule.onNodeWithTag("Weight").performClick();rule.onNodeWithTag("Weight Light").performClick()
+        waitFor{model.state!!.selected!!.text!!.getJSONArray("spans").getJSONObject(0).getJSONObject("style").getInt("weight")==300}
+        rule.onNodeWithTag("Font").performClick();shot("font-picker");rule.onNodeWithTag("Font Noto Serif").performClick()
+        waitFor{model.state!!.selected!!.text!!.getJSONArray("spans").getJSONObject(0).getJSONObject("style").getString("family")=="Noto Serif"}
+        Assert.assertEquals(0,model.selectionStart);Assert.assertEquals(5,model.selectionEnd)
+        rule.onNodeWithTag("Weight").performClick();rule.onNodeWithTag("Weight Bold").performClick()
+        waitFor{model.state!!.selected!!.text!!.getJSONArray("spans").getJSONObject(0).getJSONObject("style").getInt("weight")==700}
+        selectText(10,15)
+        rule.onNodeWithTag("Weight").performClick();rule.onNodeWithTag("Weight Black").performClick()
+        waitFor{model.state!!.selected!!.text!!.getJSONArray("spans").let{s->(0 until s.length()).any{s.getJSONObject(it).getJSONObject("style").getInt("weight")==900}}}
+        rule.onNodeWithTag("Text color").performClick();rule.onNodeWithTag("Color #2878ED").performClick()
+        waitFor{model.state!!.selected!!.text!!.getJSONArray("spans").let{s->(0 until s.length()).any{s.getJSONObject(it).getJSONObject("style").getJSONObject("color").getInt("b")==237}}}
+        Assert.assertEquals(10,model.selectionStart);Assert.assertEquals(15,model.selectionEnd)
+        rule.onNodeWithTag("Hyperlink").performScrollTo().performClick();rule.onNodeWithTag("Link URL").performTextReplacement("example.com");rule.onNodeWithTag("Apply link").performClick()
+        waitFor{model.state!!.selected!!.text!!.getJSONArray("spans").let{s->(0 until s.length()).any{s.getJSONObject(it).getJSONObject("style").optString("link")=="https://example.com/"}}}
+        shot("desktop-text-tools")
+        val spans=model.state!!.selected!!.text!!.getJSONArray("spans")
+        val first=spans.getJSONObject(0).getJSONObject("style")
+        Assert.assertEquals("Noto Serif",first.getString("family"));Assert.assertEquals(700,first.getInt("weight"));Assert.assertEquals(35,first.getJSONObject("color").getInt("r"))
+        rule.onNodeWithTag("Done").performClick();waitFor{model.sheet==null}
+    }
+    @Test fun imageInspectorLayerVisibilityLocksAndEditableComponents() {
+        rule.onNodeWithTag("Preset PhotoResume").performScrollTo().performClick();waitFor{!model.home}
+        val image=model.state!!.layers.first{it.image!=null};model.select(image.id);waitFor{model.state?.selectedId==image.id}
+        rule.onNodeWithTag("Properties").performClick()
+        rule.onNodeWithTag("Bigger").performScrollTo().performClick();waitFor{model.state!!.selected!!.width>image.width}
+        Assert.assertEquals(image.width/image.height,model.state!!.selected!!.width/model.state!!.selected!!.height,.01f)
+        rule.onNodeWithTag("Stretch").performScrollTo().performClick();waitFor{model.state!!.selected!!.node.getString("image_sizing")=="Stretch"}
+        rule.onNodeWithTag("Field H").performScrollTo().performTextReplacement("100")
+        rule.onNodeWithTag("Apply H").performClick();waitFor{model.state!!.selected!!.height==100f}
+        rule.onNodeWithTag("Scale").performScrollTo().performClick();waitFor{model.state!!.selected!!.node.getString("image_sizing")=="Scale"}
+        Assert.assertEquals(image.width/image.height,model.state!!.selected!!.width/model.state!!.selected!!.height,.01f)
+        rule.onNodeWithTag("Soft").performScrollTo().performClick();waitFor{model.state!!.selected!!.radius==12f}
+        shot("image-properties")
+        rule.onNodeWithTag("Done").performClick();waitFor{model.sheet==null}
+        fun panel(tag:String)=rule.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag("Panel")))
+        rule.onNodeWithTag("Layers").performClick();panel("Hide layer").performClick();waitFor{model.state!!.selected!!.visible==false}
+        panel("Show layer").performClick();waitFor{model.state!!.selected!!.visible}
+        panel("Lock layer").performClick();waitFor{model.state!!.selected!!.locked}
+        panel("Unlock layer").performClick();waitFor{!model.state!!.selected!!.locked}
+        panel("Assets").performClick();panel("Component Callout").performClick()
+        waitFor{model.sheet==null&&model.state!!.selected!!.node.getJSONArray("children").length()>0}
+        val frame=model.state!!.selected!!;val child=model.state!!.layers.first{it.depth>frame.depth&&it.text!=null}
+        model.select(child.id);waitFor{model.state?.selectedId==child.id};shot("editable-components")
+        rule.onNodeWithTag("Layers").performClick();panel("Expand layer ${frame.id}").performClick();panel("Layer ${child.id}").assertDoesNotExist()
+        panel("Expand layer ${frame.id}").performClick();panel("Layer ${child.id}").assertExists();rule.onNodeWithTag("Done").performClick();waitFor{model.sheet==null}
+        rule.onNodeWithTag("Undo").performClick();waitFor{model.state!!.layers.none{it.id==frame.id}}
     }
     @Test fun liveBackgroundRemovalRetainsPhotoAndUndo() {
         Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("liveBackground")=="true")

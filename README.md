@@ -19,7 +19,7 @@ DOCX import is not implemented yet.
 
 ## Run
 
-An initial native Android version is available too. Build an APK with
+A native Android version with desktop icons, fonts and editable components is available too. Build an APK with
 `./scripts/package-android.sh`; see [Android instructions](android/README.md)
 for supported devices, mobile features and emulator checks. It shares the Rust
 document engine and `.compose` files with desktop.

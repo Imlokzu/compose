@@ -1,7 +1,8 @@
 # Compose for Android
 
 Native Kotlin/Jetpack Compose UI with the existing Rust engine through JNI.
-This is the first mobile editor milestone, not complete desktop feature parity.
+The mobile editor shares desktop icons, document formats, fonts and components.
+Complete desktop feature parity remains future work.
 
 ## Build
 
@@ -27,12 +28,21 @@ signing identity remain separate work. Do not share the private signing key.
   text, shape geometry, original images, styles and nesting. A local draft is saved
   after edits and can be continued after process restart.
 - Native multiline keyboard/IME input, Android text selection and clipboard.
-  Bold, italic, underline, font and size apply to the selected passage or whole box.
+  Bold, italic, underline, font, real bundled weights, size, color and hyperlinks
+  apply to the selected passage or whole box. Font menus preview actual faces;
+  mixed ranges retain unrelated styles. Paragraph alignment is editable.
 - Rectangle, Circle, Oval, Triangle, Diamond, Pentagon, Hexagon, Star, Arrow, Line
   and Frame. Tap to select, drag selected objects, resize handles, two-finger pan
   and pinch zoom. Circles and Scale-mode images keep their proportions.
-- Phone Layers/Properties sheets and a tablet Layers sidebar. Color, corners,
-  strokes, shadow, duplicate, delete and ordering have real engine commands.
+- Desktop line icons, labeled touch tools, two/four-column galleries with previews
+  rendered from real editable presets, blue active states and subtle panel dividers.
+- Phone Layers/Properties sheets, tablet Layers sidebar and a right inspector on
+  wide tablets. Nested layers expand/collapse, hide/show, lock/unlock and reorder.
+  Assets inserts desktop Title, Callout, Quote, Stat, Card and Divider components as
+  ordinary editable nested objects, in one undo step.
+- Numeric position/size, image Scale/Stretch and Bigger/Smaller, color, opacity,
+  Square/Soft/Round corners, strokes, shadow, page alignment, duplicate and delete
+  have real engine commands. Image dimensions retain proportions in Scale mode.
 - Original local image insertion and the existing keyless shared background-removal
   service. Cutouts preserve geometry and Undo. No provider credential is bundled.
 - PNG export and editable DOCX export in Word-compatible mode. Native printing,
@@ -43,6 +53,9 @@ The page preview uses Rust/Parley glyph layout and the same raster renderer as P
 output. Android reads its system Arabic/CJK/Devanagari fallback fonts when present.
 The shared renderer uses bundled Noto bitmap emoji because Swash does not paint
 Android 15's system COLRv1 emoji font. Font licenses are included in the APK.
+
+`python3 scripts/android-icons.py` regenerates Android vectors from the canonical
+desktop SVGs in `assets/icons`. No icon library or network font download is needed.
 
 ## Emulator checks
 

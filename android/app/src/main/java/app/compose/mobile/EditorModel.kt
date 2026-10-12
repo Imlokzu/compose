@@ -24,7 +24,7 @@ object NativeBridge {
 fun command(op: String, vararg values: Pair<String, Any?>) = JSONObject().put("op", op).apply {
     values.forEach { (key,value) -> put(key,value ?: JSONObject.NULL) }
 }
-data class Layer(val node: JSONObject, val bounds: JSONObject, val opacity: Float, val locked: Boolean, val depth: Int, val path: JSONArray?) {
+data class Layer(val node: JSONObject, val bounds: JSONObject, val opacity: Float, val locked: Boolean, val depth: Int, val path: JSONArray?, val visible:Boolean) {
     val id get() = node.getLong("id")
     val name get() = node.getString("name")
     val kind get() = node.get("kind")
@@ -49,7 +49,7 @@ data class EditorState(val json: JSONObject) {
     val layers: List<Layer> get() {
         val scene = json.getJSONArray("scene")
         return (0 until scene.length()).map { scene.getJSONObject(it) }.map {
-            Layer(it.getJSONObject("node"), it.getJSONObject("bounds"), it.getDouble("opacity").toFloat(), it.getBoolean("locked"), it.getInt("depth"), it.optJSONArray("path"))
+            Layer(it.getJSONObject("node"), it.getJSONObject("bounds"), it.getDouble("opacity").toFloat(), it.getBoolean("locked"), it.getInt("depth"), it.optJSONArray("path"),it.optBoolean("visible",true))
         }
     }
     val selected get() = layers.find { it.id == selectedId }
@@ -63,14 +63,15 @@ class EditorModel(application: Application) : AndroidViewModel(application) {
     private val context get() = getApplication<Application>()
     var state by mutableStateOf<EditorState?>(null); private set
     var images by mutableStateOf<Map<String, Bitmap>>(emptyMap()); private set
+    var previews by mutableStateOf<Map<String, Bitmap>>(emptyMap()); private set
     private val imageVersions = mutableMapOf<String, String>()
     var busy by mutableStateOf(false); private set
     var message by mutableStateOf(""); private set
     var home by mutableStateOf(true)
     var sheet by mutableStateOf<String?>(null)
     var editingId by mutableStateOf<Long?>(null)
-    var selectionStart = 0
-    var selectionEnd = 0
+    var selectionStart by mutableIntStateOf(0)
+    var selectionEnd by mutableIntStateOf(0)
     var ready by mutableStateOf(false); private set
     init {
         viewModelScope.launch {
@@ -93,7 +94,7 @@ class EditorModel(application: Application) : AndroidViewModel(application) {
         check(response.optBoolean("ok")) { response.optString("error", "Could not complete this action") }
         val next = EditorState(response)
         val nextImages = images.toMutableMap()
-        for (layer in next.layers) {
+        for (layer in next.layers.filter{it.visible}) {
             val key = layer.assetKey ?: continue
             val version = if (layer.text != null) layer.node.toString() else key
             if (imageVersions[key] == version && nextImages[key] != null) continue
@@ -106,7 +107,7 @@ class EditorModel(application: Application) : AndroidViewModel(application) {
             val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: continue
             nextImages[key] = bitmap; imageVersions[key] = version
         }
-        val used = next.layers.mapNotNull { it.assetKey }.toSet()
+        val used = next.layers.filter{it.visible}.mapNotNull { it.assetKey }.toSet()
         nextImages.keys.retainAll(used)
         imageVersions.keys.retainAll(used)
         return Update(next, nextImages)
@@ -130,6 +131,22 @@ class EditorModel(application: Application) : AndroidViewModel(application) {
     }
     fun create(preset: String, word: Boolean) {
         dispatch(command("new", "preset" to preset, "mode" to if (word) "Word" else "Compose")) { home = false; sheet = null }
+    }
+    suspend fun loadPreviews(word:Boolean) {
+        for(preset in listOf("Blank","Resume","PhotoResume","PhotoCover","Report","Letter","Portfolio","Poster")) {
+            if(word&&preset !in listOf("Blank","Resume","Report","Letter"))continue
+            val key="preset:${if(word)"Word"else"Compose"}:$preset"
+            if(previews[key]!=null)continue
+            val bitmap=mutex.withLock {withContext(Dispatchers.IO) {
+                runCatching {val bytes=NativeBridge.asset(session,key);BitmapFactory.decodeByteArray(bytes,0,bytes.size)}.getOrNull()
+            }}
+            if(bitmap!=null)previews=previews+(key to bitmap)
+            yield()
+        }
+    }
+    fun frame(layer:Layer,field:String,value:Float) {
+        val frame=JSONObject().put("x",layer.x).put("y",layer.y).put("width",layer.width).put("height",layer.height).put(field,value)
+        dispatch(command("frame","frame" to frame,"axis" to field))
     }
     fun select(id: Long?) { dispatch(command("select", "id" to id)) }
     fun insert(kind: String) {

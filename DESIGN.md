@@ -29,6 +29,23 @@ Write like a document. Design like a canvas. Real editing, placement and local s
   history, file roundtrip, export and lifecycle on emulators. Keep unavailable
   desktop-only features out of mobile controls and report platform limits honestly.
 
+## Android desktop visual alignment (0.16)
+- Reuse the exact desktop SVG line icons through generated Android vectors.
+  Keep 48dp touch targets, icon labels/tooltips, blue active states, 6dp control
+  corners, hairline dividers, white panels and the warm grey canvas.
+- Top bar: compact document title, icon Undo/Redo/Save/menu. Bottom tools use
+  desktop icons above short labels. Pages and document mode stay visible.
+- Tablet layout adds a true right inspector beside canvas and Layers. Phone
+  Properties remains a compact, scrollable sheet with the same section hierarchy.
+- Shape picker, Layers, Assets and inspector share type-specific icons. Show
+  real editable component blocks; no disconnected or decorative tool controls.
+- Font selector previews actual bundled typefaces and valid weights. Text tools
+  retain range selection through font, weight, size, style and color changes.
+- Preset gallery previews render actual Rust documents. Use two columns on phones
+  and four on larger screens, with a clear Compose / Word mode choice.
+- Verify icon controls, image Scale/Stretch, inspector edits, components, partial
+  typography, layers visibility/locking and phone/tablet visual states in emulators.
+
 ## Personas and jobs
 Students and people making homework, reports, worksheets, posters and covers on desktop.
 

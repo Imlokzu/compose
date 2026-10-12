@@ -85,7 +85,7 @@ class DocumentCanvas(context: Context) : View(context) {
         paint.reset();paint.isAntiAlias=true;paint.color=Color.rgb(255,254,251)
         paint.setShadowLayer(12f,0f,3f,0x17000000);canvas.drawRect(page,paint);paint.clearShadowLayer()
         canvas.save();canvas.clipRect(page)
-        for(layer in state.layers) {
+        for(layer in state.layers.filter{it.visible}) {
             val r=bounds(layer);val displayed=if(layer.id==state.selectedId)preview else null
             canvas.save()
             if(displayed!=null) {
