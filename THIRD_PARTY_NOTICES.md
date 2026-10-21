@@ -14,3 +14,10 @@ Compose's original code is licensed under MIT; see [LICENSE](LICENSE).
 Images found through the in-app web search retain their original ownership and
 usage rights. A search result or insertion into a document does not grant a
 license to the image. Compose preserves source metadata where available.
+# Microsoft Visual C++ runtime (Windows package)
+
+The Windows ZIP includes Microsoft's x64 `vcruntime140.dll` from the Visual
+Studio redistributable directory. It is Microsoft software, distributed under
+the [Microsoft Visual Studio 2022 runtime license](https://visualstudio.microsoft.com/license-terms/vs2022-cruntime/),
+not Compose's MIT license. Keep it beside `compose.exe`.
+See the [Visual Studio distributable-code list](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution).

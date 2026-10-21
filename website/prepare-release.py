@@ -16,7 +16,7 @@ digest = hashlib.sha256(source.read_bytes()).hexdigest()
 if checksum_file.read_text(encoding="utf-8-sig").split()[0].lower() != digest:
     raise SystemExit("Checksum mismatch; refusing to publish this package.")
 with zipfile.ZipFile(source) as archive:
-    required = {"Compose/compose.exe", "Compose/LICENSE", "Compose/START-HERE.txt", "Compose/GPUI-LICENSE.txt"}
+    required = {"Compose/compose.exe", "Compose/vcruntime140.dll", "Compose/LICENSE", "Compose/START-HERE.txt", "Compose/GPUI-LICENSE.txt"}
     if not required.issubset(archive.namelist()):
         raise SystemExit("Windows package is missing its executable or required documentation.")
     if archive.testzip() is not None:

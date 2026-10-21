@@ -12,6 +12,15 @@ try {
     New-Item -ItemType Directory -Force $composeOutput | Out-Null
     New-Item -ItemType Directory -Force dist | Out-Null
     Copy-Item target/release/compose.exe $composeOutput
+    # Rust's MSVC target imports this redistributable DLL. Include it app-locally
+    # so a clean Windows PC does not need a separate administrator installation.
+    $composeVsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+    $composeVsRoot = & $composeVsWhere -latest -products '*' -property installationPath
+    if ($LASTEXITCODE -ne 0 -or -not $composeVsRoot) { throw 'Visual Studio installation not found' }
+    $composeRuntime = Get-ChildItem "$composeVsRoot/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT/vcruntime140.dll" |
+        Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $composeRuntime) { throw 'The x64 Visual C++ redistributable runtime was not found' }
+    Copy-Item $composeRuntime.FullName (Join-Path $composeOutput 'vcruntime140.dll')
     Copy-Item LICENSE $composeOutput
     Copy-Item THIRD_PARTY_NOTICES.md $composeOutput
     Copy-Item docs/WINDOWS.md (Join-Path $composeOutput "START-HERE.txt")
