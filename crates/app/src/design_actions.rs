@@ -19,6 +19,9 @@ impl Workspace {
         self.shape_change_target = None;
     }
     pub fn toggle_popup(&mut self, popup: Popup) {
+        if self.pending.is_some() {
+            return;
+        }
         self.commit_field();
         self.text_popup_anchor = None;
         if self.popup == Some(popup) {

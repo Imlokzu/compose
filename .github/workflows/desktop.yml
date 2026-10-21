@@ -2,6 +2,7 @@ name: Native desktop builds
 on:
   push:
     branches: [main]
+    paths-ignore: ['website/**', 'README.md', 'DESIGN.md', '.gitignore']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -24,6 +25,8 @@ jobs:
       matrix:
         os: [windows-latest, macos-14]
     runs-on: ${{ matrix.os }}
+    env:
+      COMPOSE_BACKGROUND_SERVICE_URL: https://compose-background.onrender.com/v1/background/remove
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -39,16 +42,19 @@ jobs:
         run: cargo test --workspace --locked
       - name: Build optimized native desktop app
         run: cargo build -p compose --release --locked
-      - name: Verify packaged document engine on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $process = Start-Process ./target/release/compose.exe -ArgumentList '--smoke-test' -Wait -PassThru
-          if ($process.ExitCode -ne 0) { throw "Smoke test failed: $($process.ExitCode)" }
       - name: Package Windows executable
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/package-windows.ps1
+      - name: Verify extracted Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'compose-package-check'
+          Expand-Archive dist/Compose-Windows.zip -DestinationPath $destination
+          $folder = Join-Path $destination 'Compose'
+          $process = Start-Process (Join-Path $folder 'compose.exe') -WorkingDirectory $folder -ArgumentList '--smoke-test' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Smoke test failed: $($process.ExitCode)" }
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:

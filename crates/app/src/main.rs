@@ -28,6 +28,7 @@ mod preset_smoke;
 mod printing;
 mod properties;
 mod refinement_smoke;
+mod release_smoke;
 mod selection;
 mod selection_smoke;
 mod shapes;

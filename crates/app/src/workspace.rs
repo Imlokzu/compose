@@ -457,13 +457,13 @@ impl Workspace {
         );
     }
     pub fn undo(&mut self, redo: bool) {
+        if self.pending.is_some() || self.preview {
+            return;
+        }
         self.drag_epoch = self.drag_epoch.wrapping_add(1);
         self.cutout_generation = self.cutout_generation.wrapping_add(1);
         self.cutout_target = None;
         self.image_picker.invalidate();
-        if self.preview {
-            return;
-        }
         self.popup = None;
         self.text_popup_anchor = None;
         self.picker = None;
@@ -699,6 +699,9 @@ impl Workspace {
         self.set_status("Updated", false);
     }
     pub fn request(&mut self, p: Pending, cx: &mut Context<Self>) {
+        if self.pending.is_some() || self.busy {
+            return;
+        }
         if matches!(p, Pending::New | Pending::NewWord) {
             self.open_creation(if matches!(p, Pending::NewWord) {
                 document::DocumentMode::Word
@@ -864,7 +867,7 @@ impl Workspace {
         .detach();
     }
     pub fn choose_file(&mut self, image: bool, cx: &mut Context<Self>) {
-        if self.busy {
+        if self.busy || self.pending.is_some() {
             return;
         }
         self.commit_field();

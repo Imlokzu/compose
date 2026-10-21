@@ -61,6 +61,9 @@ pub fn native(window: gpui::WindowHandle<crate::workspace::Workspace>, cx: &mut 
         cx.background_executor().timer(std::time::Duration::from_millis(700)).await;
         let result = async {
             run_native(window, cx)?;
+            if std::env::args().any(|a| a == "--release-checks") {
+                crate::release_smoke::run(window, cx)?;
+            }
             if std::env::args().any(|a| a == "--font-weights") {
                 let faces = window.update(cx, |s, w, _| s.engine.verify_native_faces(w))??;
                 println!("FONT_FACES_PASS: {faces} distinct native faces match Parley glyph indices");

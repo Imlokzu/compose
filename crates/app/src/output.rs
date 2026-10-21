@@ -131,7 +131,7 @@ pub fn write(
 }
 impl Workspace {
     pub fn export_document(&mut self, format: OutputFormat, cx: &mut Context<Self>) {
-        if self.busy {
+        if self.busy || self.pending.is_some() {
             return;
         }
         if format == OutputFormat::Word && !self.word_mode() {
@@ -208,6 +208,9 @@ impl Workspace {
         .detach();
     }
     pub fn print_document(&mut self, cx: &mut Context<Self>) {
+        if self.pending.is_some() {
+            return;
+        }
         if self.busy {
             return;
         }

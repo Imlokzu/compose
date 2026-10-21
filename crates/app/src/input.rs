@@ -345,7 +345,13 @@ impl Workspace {
                 }
                 "tab" => {
                     if self.field.is_some() {
-                        self.commit_field()
+                        let edit = self.field.clone();
+                        self.error = false;
+                        self.commit_field();
+                        if self.error {
+                            self.field = edit;
+                            self.caret_visible = true;
+                        }
                     } else {
                         self.replace_input(self.range(), "\t")
                     }
