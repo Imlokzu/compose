@@ -8,6 +8,19 @@
 ## Brand
 Calm, precise, native. Two offset pages as the mark. Avoid ribbons, dashboard cards, gratuitous gradients and large navigation.
 
+## Windows download website (2026-10-21)
+- Publish at `compose.waveio.me` with Cloudflare Static Assets. This distributes
+  the native Windows editor; it is not a browser version of the editor.
+- Warm paper background, forest-green actions, bundled Lato and Noto Serif.
+  Spacious editorial typography, the existing mark, real editor screenshot and
+  real rendered preset previews. Label the screenshot's macOS interface.
+- Direct download, extraction steps, Windows guide, checksum, source and issue
+  links. State the unsigned preview status and platform limitations clearly.
+- Responsive layout, keyboard focus, a skip link, semantic sections and native
+  FAQ disclosures. No JavaScript, trackers, remote fonts or account flow.
+- Verify desktop/mobile screenshots, disclosure controls, overflow, accessibility,
+  404 responses and exact production download checksums before calling it live.
+
 ## Product goals
 Write like a document. Design like a canvas. Real editing, placement and local save/reopen. Word-compatible documents export editable DOCX. Exclude cloud, accounts, AI, presentations and DOCX import. Success means a user can create and reopen a designed page with text and an image.
 

@@ -5,6 +5,19 @@ reports, homework, posters and everyday documents.
 
 **Write like a document. Design like a canvas.**
 
+**Windows preview:** [Download Compose](https://compose.waveio.me) ·
+[Windows guide](https://compose.waveio.me/windows).
+The portable ZIP is hosted on Cloudflare, includes a SHA-256 checksum, and needs
+no installer or account. The preview is unsigned; physical Windows graphics and
+interaction testing remains in progress.
+
+Windows release refinements include platform-correct menu shortcuts, portable
+filenames, overwrite confirmation when adding `.compose`, a quiet GUI launch,
+and a clean ZIP with instructions and licenses. Undo/Redo and file/export
+commands now respect the unsaved-changes prompt; invalid inspector input stays
+editable after Tab. Native regression checks:
+`cargo run -p compose -- --ui-smoke --release-checks --compact`.
+
 Compose combines rich text editing with movable images, shapes, layers and
 groups in a calm native interface. Built in Rust with GPUI and Parley, without
 Electron or webviews.
@@ -430,7 +443,9 @@ uploading and allows up to two minutes for the service to wake.
 Windows development needs Rust's MSVC toolchain and Visual Studio C++ Build Tools
 with the Windows SDK (GPUI compiles its DirectX shaders using `fxc.exe`). Run
 `./scripts/package-windows.ps1` for an optimized portable Windows ZIP.
-GitHub CI publication and Windows GUI/hardware QA are still pending.
+The native desktop GitHub workflow builds the Windows ZIP, checks its extracted
+executable and uploads the archive with its SHA-256 checksum. Windows GUI/hardware
+QA is still pending. Deployment instructions are in [website/README.md](website/README.md).
 
 ```sh
 cargo run -p compose -- --ui-smoke --actions --compact

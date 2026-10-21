@@ -21,3 +21,7 @@
 !.env.example
 *.pem
 *.key
+/website/node_modules
+/website/.wrangler
+/website/public/downloads/*.zip
+/website/public/downloads/*.sha256

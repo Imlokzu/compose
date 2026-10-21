@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "compose",
+  "compatibility_date": "2026-10-21",
+  "workers_dev": true,
+  "routes": [{ "pattern": "compose.waveio.me", "custom_domain": true }],
+  "assets": { "directory": "./public", "not_found_handling": "404-page" }
+}
