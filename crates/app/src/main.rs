@@ -1,3 +1,8 @@
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 mod actions_smoke;
 mod canvas;
 mod clipboard;
@@ -109,22 +114,28 @@ fn main() {
                     ],
                 },
             ]);
+            let primary = if cfg!(target_os = "macos") {
+                "cmd"
+            } else {
+                "ctrl"
+            };
+            let shortcut = |key: &str| key.replacen("cmd", primary, 1);
             cx.bind_keys([
-                KeyBinding::new("cmd-n", NewDocument, None),
-                KeyBinding::new("cmd-o", OpenDocument, None),
-                KeyBinding::new("cmd-s", SaveDocument, None),
-                KeyBinding::new("cmd-shift-s", SaveAs, None),
-                KeyBinding::new("cmd-shift-e", ExportMenu, None),
-                KeyBinding::new("cmd-p", PrintDocument, None),
-                KeyBinding::new("cmd-g", GroupSelection, None),
-                KeyBinding::new("cmd-shift-g", UngroupSelection, None),
-                KeyBinding::new("cmd-z", UndoEdit, None),
-                KeyBinding::new("cmd-shift-z", RedoEdit, None),
-                KeyBinding::new("cmd-c", CopyText, None),
-                KeyBinding::new("cmd-x", CutText, None),
-                KeyBinding::new("cmd-v", PasteText, None),
-                KeyBinding::new("cmd-a", SelectText, None),
-                KeyBinding::new("cmd-q", QuitCompose, None),
+                KeyBinding::new(&shortcut("cmd-n"), NewDocument, None),
+                KeyBinding::new(&shortcut("cmd-o"), OpenDocument, None),
+                KeyBinding::new(&shortcut("cmd-s"), SaveDocument, None),
+                KeyBinding::new(&shortcut("cmd-shift-s"), SaveAs, None),
+                KeyBinding::new(&shortcut("cmd-shift-e"), ExportMenu, None),
+                KeyBinding::new(&shortcut("cmd-p"), PrintDocument, None),
+                KeyBinding::new(&shortcut("cmd-g"), GroupSelection, None),
+                KeyBinding::new(&shortcut("cmd-shift-g"), UngroupSelection, None),
+                KeyBinding::new(&shortcut("cmd-z"), UndoEdit, None),
+                KeyBinding::new(&shortcut("cmd-shift-z"), RedoEdit, None),
+                KeyBinding::new(&shortcut("cmd-c"), CopyText, None),
+                KeyBinding::new(&shortcut("cmd-x"), CutText, None),
+                KeyBinding::new(&shortcut("cmd-v"), PasteText, None),
+                KeyBinding::new(&shortcut("cmd-a"), SelectText, None),
+                KeyBinding::new(&shortcut("cmd-q"), QuitCompose, None),
             ]);
             let dimensions = if std::env::args().any(|a| a == "--compact") {
                 size(px(1000.), px(680.))

@@ -37,7 +37,7 @@ pub fn destination(mut path: PathBuf, format: OutputFormat) -> anyhow::Result<Pa
     );
     Ok(path)
 }
-fn filename(name: &str) -> String {
+pub(crate) fn filename(name: &str) -> String {
     let name: String = name
         .chars()
         .map(|c| {
@@ -49,10 +49,62 @@ fn filename(name: &str) -> String {
         })
         .take(120)
         .collect();
-    if name.trim().is_empty() {
+    let name = name.trim().trim_end_matches(['.', ' ']);
+    if name.is_empty() {
         "Untitled".into()
     } else {
-        name
+        // Windows treats device names as reserved even with an extension.
+        let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || ["COM", "LPT"].iter().any(|prefix| {
+                stem.strip_prefix(prefix).is_some_and(|n| {
+                    matches!(
+                        n,
+                        "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                    )
+                })
+            });
+        if reserved {
+            format!("_{name}")
+        } else {
+            name.into()
+        }
+    }
+}
+
+#[cfg(test)]
+mod filename_tests {
+    use super::*;
+
+    #[test]
+    fn document_titles_produce_portable_filenames() {
+        for (title, expected) in [
+            ("My report", "My report"),
+            ("a/b\\c:d?e", "a_b_c_d_e"),
+            ("  Report... ", "Report"),
+            ("...", "Untitled"),
+            ("con", "_con"),
+            ("LPT1.notes", "_LPT1.notes"),
+            ("COM¹", "_COM¹"),
+            ("Résumé", "Résumé"),
+        ] {
+            assert_eq!(filename(title), expected);
+        }
+        assert_eq!(filename(&"é".repeat(200)).chars().count(), 120);
+    }
+
+    #[test]
+    fn adding_extension_does_not_overwrite_an_unconfirmed_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let full = dir.path().join("report.compose");
+        std::fs::write(&full, b"existing document").unwrap();
+        assert!(destination(dir.path().join("report"), OutputFormat::Compose).is_err());
+        assert_eq!(std::fs::read(&full).unwrap(), b"existing document");
+        assert_eq!(
+            destination(full.clone(), OutputFormat::Compose).unwrap(),
+            full
+        );
+        assert!(destination(dir.path().join("report.txt"), OutputFormat::Compose).is_err());
     }
 }
 pub fn write(

@@ -803,7 +803,10 @@ impl Workspace {
             .as_ref()
             .and_then(|p| p.parent())
             .unwrap_or(&default_dir);
-        let name = format!("{}.compose", self.editor.document.name);
+        let name = format!(
+            "{}.compose",
+            crate::output::filename(&self.editor.document.name)
+        );
         let prompt = cx.prompt_for_new_path(dir, Some(&name));
         self.busy = true;
         cx.spawn(async move |this, cx| {
@@ -811,11 +814,11 @@ impl Workspace {
             this.update(cx, |this, cx| {
                 this.busy = false;
                 match result {
-                    Ok(Ok(Some(mut p))) => {
-                        if p.extension().is_none() {
-                            p.set_extension("compose");
+                    Ok(Ok(Some(p))) => {
+                        match crate::output::destination(p, crate::output::OutputFormat::Compose) {
+                            Ok(p) => this.save_to(p, cx),
+                            Err(e) => this.set_status(format!("Could not save: {e}"), true),
                         }
-                        this.save_to(p, cx);
                     }
                     Ok(Ok(None)) => {
                         this.pending = None;
