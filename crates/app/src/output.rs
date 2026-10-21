@@ -74,7 +74,7 @@ pub(crate) fn filename(name: &str) -> String {
 
 #[cfg(test)]
 mod filename_tests {
-    use super::*;
+    use super::{OutputFormat, destination, filename};
 
     #[test]
     fn document_titles_produce_portable_filenames() {
